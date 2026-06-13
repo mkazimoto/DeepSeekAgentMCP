@@ -6,13 +6,7 @@ using System.Text.Json;
 // ============================================================
 
 Console.ForegroundColor = ConsoleColor.Cyan;
-Console.WriteLine(@"
-  ____               _      ____       _            __  __  ____ ____
- |  _ \  ___  ___ __(_) ___/ ___|  ___| |__   ___  |  \/  |/ ___|  _ \
- | | | |/ _ \/ __/ _| |/ _ \___ \ / __| '_ \ / _ \ | |\/| | |   | |_) |
- | |_| |  __/ (_| |_| |  __/___) | (__| | | |  __/ | |  | | |___|  __/
- |____/ \___|\___\__|_|\___|____/ \___|_| |_|\___| |_|  |_|\____|_|
-");
+Console.WriteLine(@"DeepSeek Agent with MCP Support");
 Console.ResetColor();
 Console.WriteLine("=== DeepSeek Agent with MCP Support ===\n");
 
@@ -30,7 +24,7 @@ if (File.Exists(configPath))
     using var doc = JsonDocument.Parse(configJson);
     var deepSeekConfig = doc.RootElement.GetProperty("DeepSeek");
 
-    apiKey = deepSeekConfig.GetProperty("ApiKey").GetString() ?? string.Empty;
+    apiKey = string.Empty;
     model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-chat";
     maxTokens = deepSeekConfig.GetProperty("MaxTokens").GetInt32();
     temperature = deepSeekConfig.GetProperty("Temperature").GetDouble();
