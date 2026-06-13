@@ -104,7 +104,81 @@ DeepSeekAgentMCP/
 └── README.md
 ```
 
-## 📋 Pré-requisitos
+## �️ Windows Service
+
+O agente pode ser executado como um **Serviço Windows**, rodando em segundo plano com a interface web habilitada.
+
+### Instalação
+
+Execute o PowerShell como **Administrador** e use o script de instalação:
+
+```powershell
+# Instalar o serviço
+.\scripts\install-service.ps1 -Action install
+
+# Verificar status
+.\scripts\install-service.ps1 -Action status
+
+# Desinstalar o serviço
+.\scripts\install-service.ps1 -Action uninstall
+```
+
+O script:
+1. Compila o projeto em modo **Release** com `dotnet publish --self-contained`
+2. Cria o serviço Windows com nome `DeepSeekAgentMCP`
+3. Configura inicialização automática
+4. Inicia o serviço automaticamente
+
+### Gerenciamento manual
+
+```powershell
+# Via PowerShell (como Administrador)
+Stop-Service -Name DeepSeekAgentMCP
+Start-Service -Name DeepSeekAgentMCP
+Restart-Service -Name DeepSeekAgentMCP
+
+# Via sc.exe
+sc.exe stop DeepSeekAgentMCP
+sc.exe start DeepSeekAgentMCP
+```
+
+### Logs
+
+O serviço registra eventos no **Visualizador de Eventos do Windows**:
+
+```powershell
+Get-EventLog -LogName Application -Source DeepSeekAgentMCP -Newest 20
+```
+
+### Acesso
+
+Com o serviço rodando, acesse a interface web em:
+
+```
+http://localhost:5000
+```
+
+### Execução manual (modo serviço)
+
+Para testar o comportamento do serviço sem instalar:
+
+```bash
+cd src/DeepSeekAgentMCP
+dotnet run -- --service
+```
+
+### Estrutura de arquivos adicionada
+
+```
+DeepSeekAgentMCP/
+├── scripts/
+│   └── install-service.ps1    # Script de instalação/desinstalação
+├── src/DeepSeekAgentMCP/
+│   ├── DeepSeekAgentService.cs # Implementação do Windows Service
+│   └── ...
+```
+
+## �📋 Pré-requisitos
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js](https://nodejs.org/) (para servidores MCP baseados em npx)
