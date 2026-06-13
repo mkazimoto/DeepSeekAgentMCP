@@ -496,6 +496,29 @@ body {
     margin-bottom: 4px;
 }
 
+.message-text li > p {
+    margin-bottom: 4px;
+}
+
+.message-text ul ul,
+.message-text ol ol,
+.message-text ul ol,
+.message-text ol ul {
+    margin: 4px 0;
+}
+
+/* GFM task lists */
+.message-text ul:has(input[type="checkbox"]),
+.message-text ol:has(input[type="checkbox"]) {
+    list-style: none;
+    padding-left: 0;
+}
+
+.message-text li input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: var(--accent-primary);
+}
+
 .message-text a {
     color: var(--accent-primary);
     text-decoration: none;
@@ -503,6 +526,37 @@ body {
 
 .message-text a:hover {
     text-decoration: underline;
+}
+
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+    margin: 16px 0 8px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-primary);
+}
+
+.message-text h1 { font-size: 22px; }
+.message-text h2 { font-size: 19px; }
+.message-text h3 { font-size: 17px; }
+.message-text h4 { font-size: 16px; }
+.message-text h5 { font-size: 15px; }
+.message-text h6 { font-size: 14px; }
+
+.message-text h1:first-child,
+.message-text h2:first-child,
+.message-text h3:first-child {
+    margin-top: 0;
+}
+
+.message-text hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 16px 0;
 }
 
 .message-text blockquote {

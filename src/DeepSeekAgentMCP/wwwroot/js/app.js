@@ -278,42 +278,29 @@ class ChatApp {
         this.scrollToBottom();
     }
 
-    // --- Format Message (simple markdown) ---
+    // --- Format Message (Markdown renderer via marked) ---
     formatMessage(text) {
         if (!text) return '';
 
-        let html = this.escapeHtml(text);
+        // Configure marked for safe rendering
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false,
+            });
 
-        // Code blocks (must be before inline code)
-        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-            const escapedCode = this.escapeHtml(code.trim());
-            if (lang) {
-                return `<pre><code class="language-${this.escapeHtml(lang)}">${escapedCode}</code></pre>`;
-            }
-            return `<pre><code>${escapedCode}</code></pre>`;
-        });
+            let html = marked.parse(text);
 
-        // Inline code
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            // Open external links in new tab
+            html = html.replace(/<a href=/g, '<a target="_blank" rel="noopener" href=');
 
-        // Bold
-        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            return html;
+        }
 
-        // Italic
-        html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-        // Links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-        // Line breaks
-        html = html.replace(/\n/g, '<br>');
-
-        // Paragraphs
-        html = html.replace(/(<br>)+/g, '</p><p>');
-        html = `<p>${html}</p>`;
-        html = html.replace(/<p><\/p>/g, '');
-
-        return html;
+        // Fallback: simple text-only rendering
+        return `<p>${this.escapeHtml(text)}</p>`;
     }
 
     // --- Commands ---
