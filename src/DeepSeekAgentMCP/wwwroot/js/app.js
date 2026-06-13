@@ -65,6 +65,14 @@ class ChatApp {
 
         // Theme toggle
         this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
+
+        // Copy code button delegation
+        this.elements.messagesContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-copy-code]');
+            if (btn) {
+                this.copyCodeContent(btn);
+            }
+        });
     }
 
     // --- Theme ---
@@ -231,7 +239,7 @@ class ChatApp {
 
         const sender = document.createElement('div');
         sender.className = 'message-sender';
-        sender.textContent = type === 'user' ? 'Você' : type === 'error' ? 'Erro' : 'DeepSeek Agent';
+        sender.textContent = type === 'user' ? 'Você' : type === 'error' ? 'Erro' : 'Assistente gerador de consulta SQL';
         content.appendChild(sender);
 
         const textDiv = document.createElement('div');
@@ -295,6 +303,17 @@ class ChatApp {
 
             // Open external links in new tab
             html = html.replace(/<a href=/g, '<a target="_blank" rel="noopener" href=');
+
+            // Add copy button to code blocks
+            html = html.replace(
+                /<pre><code(?: class="([^"]*)")?>/g,
+                (match, lang) => {
+                    const langLabel = lang ? lang.replace(/^language-/, '') : 'code';
+                    const classAttr = lang ? ` class="${lang}"` : '';
+                    return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${langLabel}</span><button class="copy-btn" data-copy-code title="Copiar código"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copiar</span></button></div><pre><code${classAttr}>`;
+                }
+            );
+            html = html.replace(/<\/code><\/pre>(?!\s*<\/div>)/g, `</code></pre></div>`);
 
             return html;
         }
@@ -397,6 +416,51 @@ class ChatApp {
         this._toastTimeout = setTimeout(() => {
             toast.classList.remove('show');
         }, 3000);
+    }
+
+    // --- Copy Code ---
+    async copyCodeContent(btn) {
+        const wrapper = btn.closest('.code-block-wrapper');
+        if (!wrapper) return;
+
+        const code = wrapper.querySelector('code');
+        if (!code) return;
+
+        try {
+            const text = code.textContent;
+            await navigator.clipboard.writeText(text);
+
+            const span = btn.querySelector('span');
+            const original = span.textContent;
+            span.textContent = 'Copiado!';
+            btn.classList.add('copied');
+
+            setTimeout(() => {
+                span.textContent = original;
+                btn.classList.remove('copied');
+            }, 2000);
+        } catch {
+            // Fallback for older browsers
+            try {
+                const range = document.createRange();
+                range.selectNodeContents(code);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                document.execCommand('copy');
+                selection.removeAllRanges();
+
+                const span = btn.querySelector('span');
+                span.textContent = 'Copiado!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    span.textContent = 'Copiar';
+                    btn.classList.remove('copied');
+                }, 2000);
+            } catch {
+                this.showToast('❌ Erro ao copiar');
+            }
+        }
     }
 
     escapeHtml(text) {
