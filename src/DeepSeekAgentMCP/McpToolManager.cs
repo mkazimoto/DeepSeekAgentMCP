@@ -223,6 +223,7 @@ public class McpToolManager : IAsyncDisposable
         if (schema == null || schema.Value.ValueKind != JsonValueKind.Object)
             return new { };
 
+        // Return the schema as-is since DeepSeek accepts standard JSON Schema
         return schema.Value;
     }
 
@@ -242,5 +243,8 @@ public class McpToolManager : IAsyncDisposable
         _clients.Clear();
     }
 
+    /// <summary>
+    /// Internal wrapper to associate server name with client and tools.
+    /// </summary>
     private record McpClientWrapper(string ServerName, McpClient Client, IList<McpClientTool> Tools);
 }
