@@ -1,0 +1,65 @@
+# .NET Core / ASP.NET
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+*.userosscache
+*.userprefs
+.vs/
+*.DotSettings.user
+*.csproj.user
+
+# NuGet
+packages/
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio
+*.sln.ide/
+*.sln.cache
+*.sln.ide.workspace
+*.msbuild.json
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Secrets
+config/*.local.json
+config/*.Development.json
+appsettings.*.local.json
+
+# OS generated
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.local

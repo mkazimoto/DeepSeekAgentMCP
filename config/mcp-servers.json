@@ -1,0 +1,13 @@
+{
+  "McpServers": [    
+    {
+      "Name": "totvs-rm-database-mcp-server",
+      "Enabled": true,
+      "TransportType": "http",
+      "Url": "http://localhost:3000/mcp",
+      "Headers": {
+        "Authorization": "Bearer ed931c92-33db-4fdb-aa86-c78a236bf40e"
+      }
+    }
+  ]
+}
