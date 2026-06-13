@@ -238,6 +238,16 @@ public class DeepSeekAgent : IAsyncDisposable
     public string GetMcpStatus() => _mcpToolManager.GetStatusSummary();
 
     /// <summary>
+    /// Clears the conversation history (keeps the system prompt).
+    /// </summary>
+    public void ClearConversation()
+    {
+        var systemMessage = _conversationHistory[0];
+        _conversationHistory.Clear();
+        _conversationHistory.Add(systemMessage);
+    }
+
+    /// <summary>
     /// Returns the conversation history (excluding system prompt).
     /// </summary>
     public IReadOnlyList<ChatMessage> GetConversationHistory() =>
