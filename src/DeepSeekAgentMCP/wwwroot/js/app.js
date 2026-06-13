@@ -6,6 +6,7 @@ class ChatApp {
     constructor() {
         this.isLoading = false;
         this.initElements();
+        this.restoreWelcomeMessage();
         this.initEventListeners();
         this.initTheme();
         this.loadMcpStatus();
@@ -328,13 +329,6 @@ class ChatApp {
             case '/clear':
                 await this.clearConversation();
                 break;
-            case '/history':
-                await this.showHistory();
-                break;
-            case '/mcp':
-                await this.loadMcpStatus();
-                this.showToast('✅ Status MCP atualizado');
-                break;
         }
     }
 
@@ -342,36 +336,54 @@ class ChatApp {
         try {
             await fetch('/api/clear', { method: 'POST' });
             this.elements.messagesContainer.innerHTML = '';
+            this.restoreWelcomeMessage();
             this.showToast('🧹 Conversa limpa');
         } catch (err) {
             this.showToast('❌ Erro ao limpar conversa');
         }
     }
 
-    async showHistory() {
-        try {
-            const response = await fetch('/api/history');
-            const data = await response.json();
+    restoreWelcomeMessage() {
+        const container = this.elements.messagesContainer;
 
-            if (!data.history || data.history.length === 0) {
-                this.showToast('📭 Nenhum histórico disponível');
-                return;
-            }
+        const div = document.createElement('div');
+        div.className = 'message welcome-message';
+        div.id = 'welcome-message';
 
-            // Show history in messages
-            this.elements.messagesContainer.innerHTML = '';
-            data.history.forEach(msg => {
-                if (msg.role === 'user') {
-                    this.addMessage(msg.content, 'user');
-                } else if (msg.role === 'assistant') {
-                    this.addMessage(msg.content, 'agent');
-                }
-            });
-            this.showToast(`📜 Histórico carregado (${data.history.length} mensagens)`);
-        } catch (err) {
-            this.showToast('❌ Erro ao carregar histórico');
-        }
+        div.innerHTML = `
+            <div class="message-avatar agent-avatar">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <rect width="20" height="20" rx="5" fill="url(#avatar-gradient)"/>
+                    <path d="M5 10L8 13L15 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <defs>
+                        <linearGradient id="avatar-gradient" x1="0" y1="0" x2="20" y2="20">
+                            <stop offset="0%" stop-color="#4F46E5"/>
+                            <stop offset="100%" stop-color="#7C3AED"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="message-content">
+                <div class="message-sender">Assistente gerador de consulta SQL - ERP TOTVS RM</div>
+                <div class="message-text">
+                    <p>👋 Bem vindo! Sou o <strong>Assistente gerador de consulta SQL</strong>, especializado em gerar consultas SQL a partir das suas perguntas.</p>
+                    <p>Exemplo:</p>
+                    <p>* Listar todos os lançamentos financeiros a receber inadimplentes.</p>
+                    <p>* Listar os funcionários ativos agrupados por faixa etária de 10 em 10 anos.</p>
+                    <p>* Listar as possíveis situações dos funcionários.</p>
+                    <p>* Listar os top 10 clientes inadimplentes de vendas de imóveis.</p>
+                    <p>* Listar os top 10 alunos do ensino superior inadimplentes.</p>
+                    <p>* documentação da tabela TMOV.</p>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(div);
+        this.elements.welcomeMessage = div;
+        this.scrollToBottom();
     }
+
+
 
     // --- UI Helpers ---
     setLoading(loading) {
