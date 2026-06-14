@@ -38,7 +38,8 @@ public static class SkillLoader
         var sb = new StringBuilder();
         sb.AppendLine();
         sb.AppendLine("# Internal Skills");
-        sb.AppendLine("You have the following internal skills available. Use them when the user's request matches the skill's purpose.");
+        sb.AppendLine("You MUST strictly follow the pattern, rules, and examples defined in the matching skill below when the user's request matches its purpose.");
+        sb.AppendLine("Do NOT deviate from the structure, constraints, or rules specified in the skill. Treat each skill as a mandatory template.");
         sb.AppendLine();
 
         foreach (var file in skillFiles)
