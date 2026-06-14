@@ -8,42 +8,59 @@ Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo 
 
 - Uma coluna de ID (PK) identifica cada registro
 - Uma coluna de ID pai (FK) referencia o ID do registro pai
-- Quando `ID_PAI` é NULL ou 0, o registro é raiz (nível 0)
 
 ## Template SQL
 
 ```sql
 WITH CTE_RECURSIVO AS (
-    -- Âncora: registros raiz ou ponto de partida específico
+    -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
     SELECT
-        [colunas],
+        CODCOLIGADA,
+        IDPRJ,
+        [ID],
+        [IDPAI],
         0 AS NIVEL
-    FROM [Tabela] (NOLOCK)
-    WHERE [filtro_inicial]
+    FROM [TABELA] (NOLOCK)
+    WHERE CODCOLIGADA = 1
+      AND IDPRJ = 2
+      AND [ID] = 126
 
     UNION ALL
 
-    -- Recursiva: filhos de cada registro encontrado
+    -- Passo recursivo: busca os filhos de cada tarefa encontrada
     SELECT
-        t.[colunas],
+        t.CODCOLIGADA,
+        t.IDPRJ,
+        t.[ID],
+        t.[IDPAI],
         c.NIVEL + 1 AS NIVEL
-    FROM [Tabela] t (NOLOCK)
+    FROM [TABELA] t (NOLOCK)
     INNER JOIN CTE_RECURSIVO c
-        ON t.[ID_PAI] = c.[ID]
-       AND [outros_filtros_chave_composta]
+        ON t.CODCOLIGADA = c.CODCOLIGADA
+       AND t.IDPRJ = c.IDPRJ
+       AND t.[IDPAI] = c.[ID]
+       AND t.[IDPAI] <> t.[ID]
+    WHERE
+       c.NIVEL < 10 -- Nível máximo
 )
-SELECT [colunas], NIVEL
+SELECT
+    CODCOLIGADA,
+    IDPRJ,
+    [ID],
+    [IDPAI],
+    NIVEL
 FROM CTE_RECURSIVO
-ORDER BY [codigo_hierarquico];
+OPTION (MAXRECURSION 10)    
 ```
 
 ## Exemplo prático (MTAREFA)
 
 Tabela com auto-relacionamento: `IDPAI` → `IDTRF` (ambos na mesma tabela `MTAREFA`).
+Pedido: Listar a hierarquia de todas as tarefas da tarefa 126 do projeto 2 e coligada 1.
 
 ```sql
 WITH CTE_RECURSIVO AS (
-    -- Âncora: tarefa raiz específica
+    -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
     SELECT
         CODCOLIGADA,
         IDPRJ,
@@ -55,11 +72,11 @@ WITH CTE_RECURSIVO AS (
     FROM MTAREFA (NOLOCK)
     WHERE CODCOLIGADA = 1
       AND IDPRJ = 2
-      AND CODTRF = '004.01.01'
+      AND IDTRF = 126    
 
     UNION ALL
 
-    -- Recursiva: filhos de cada tarefa
+    -- Passo recursivo: busca os filhos de cada tarefa encontrada
     SELECT
         t.CODCOLIGADA,
         t.IDPRJ,
@@ -73,6 +90,9 @@ WITH CTE_RECURSIVO AS (
         ON t.CODCOLIGADA = c.CODCOLIGADA
        AND t.IDPRJ = c.IDPRJ
        AND t.IDPAI = c.IDTRF
+       AND t.IDPAI <> t.IDTRF
+    WHERE
+        c.NIVEL < 10 -- Nível máximo
 )
 SELECT
     CODCOLIGADA,
@@ -83,7 +103,9 @@ SELECT
     IDPAI,
     NIVEL
 FROM CTE_RECURSIVO
-ORDER BY CODTRF;
+ORDER BY 
+    CODTRF
+OPTION (MAXRECURSION 10)
 ```
 
 ## Regras importantes
@@ -92,5 +114,5 @@ ORDER BY CODTRF;
 2. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
 3. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
 4. **`(NOLOCK)`** recomendado para consultas de leitura em produção
-5. **Limite de profundidade** (opcional): `WHERE c.NIVEL < 20` para evitar recursão infinita
+5. **Limite de profundidade** (opcional): `WHERE c.NIVEL < 10` para evitar recursão infinita
 6. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
