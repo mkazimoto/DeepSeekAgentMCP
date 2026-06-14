@@ -88,9 +88,12 @@ class ChatApp {
     // --- Theme ---
     initTheme() {
         const saved = localStorage.getItem('deepseek-theme');
-        if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        if (saved === 'dark' || saved === null) {
             document.documentElement.setAttribute('data-theme', 'dark');
             this.updateThemeIcons(true);
+            if (saved === null) {
+                localStorage.setItem('deepseek-theme', 'dark');
+            }
         }
     }
 
