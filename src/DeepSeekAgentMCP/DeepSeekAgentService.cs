@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -98,11 +97,11 @@ public class DeepSeekAgentService : BackgroundService
 
             var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature);
             var mcpManager = new McpToolManager(mcpConfigFullPath);
-            var agent = new DeepSeekAgent(deepSeekClient, mcpManager);
+            var sessionManager = new SessionManager(deepSeekClient, mcpManager);
 
-            await agent.InitializeAsync(stoppingToken);
+            await mcpManager.InitializeAsync(stoppingToken);
 
-            _logger.LogInformation("MCP Status: {Status}", agent.GetMcpStatus());
+            _logger.LogInformation("MCP initialized successfully.");
 
             // --- Start Web Server ---
             _logger.LogInformation("Starting web interface at {Urls}", webUrls);
@@ -150,7 +149,8 @@ public class DeepSeekAgentService : BackgroundService
 
                 try
                 {
-                    var response = await agent.ProcessMessageAsync(request.Message, stoppingToken);
+                    var sessionId = GetSessionId(request);
+                    var response = await sessionManager.ProcessMessageAsync(sessionId, request.Message, stoppingToken);
                     return Results.Ok(new { response });
                 }
                 catch (Exception ex)
@@ -163,19 +163,18 @@ public class DeepSeekAgentService : BackgroundService
             // GET /api/status — MCP server status
             app.MapGet("/api/status", () =>
             {
-                var status = agent.GetMcpStatus();
-                var servers = ParseMcpStatus(status);
                 return Results.Ok(new
                 {
                     model = model,
-                    mcpServers = servers
+                    activeSessions = sessionManager.ActiveSessionCount
                 });
             });
 
-            // GET /api/history — conversation history
-            app.MapGet("/api/history", () =>
+            // GET /api/history — conversation history for a session
+            app.MapGet("/api/history", (string? sessionId) =>
             {
-                var history = agent.GetConversationHistory();
+                var sid = sessionId ?? "default";
+                var history = sessionManager.GetHistory(sid);
                 var messages = history.Select(m => new
                 {
                     role = m.Role,
@@ -185,16 +184,17 @@ public class DeepSeekAgentService : BackgroundService
                 return Results.Ok(new { history = messages });
             });
 
-            // POST /api/clear — clear conversation
-            app.MapPost("/api/clear", () =>
+            // POST /api/clear — clear conversation for a session
+            app.MapPost("/api/clear", (ChatRequest request) =>
             {
-                agent.ClearConversation();
+                var sessionId = GetSessionId(request);
+                sessionManager.ClearConversation(sessionId);
                 return Results.Ok(new { success = true });
             });
 
             app.MapFallbackToFile("index.html");
 
-            _logger.LogInformation("DeepSeek Agent Service started successfully.");
+            _logger.LogInformation("DeepSeek Agent Service started successfully. Active sessions: {Count}", sessionManager.ActiveSessionCount);
 
             await app.RunAsync(stoppingToken);
         }
@@ -209,6 +209,11 @@ public class DeepSeekAgentService : BackgroundService
         }
     }
 
+    private static string GetSessionId(ChatRequest request)
+    {
+        return !string.IsNullOrWhiteSpace(request.SessionId) ? request.SessionId : "default";
+    }
+
     private static string GetEnvDeepSeekApiKey()
     {
         return Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY", EnvironmentVariableTarget.Process)
@@ -216,37 +221,5 @@ public class DeepSeekAgentService : BackgroundService
             ?? string.Empty;
     }
 
-    private static List<object> ParseMcpStatus(string status)
-    {
-        var servers = new List<object>();
-        if (string.IsNullOrEmpty(status) || status == "No MCP servers connected.")
-            return servers;
 
-        var lines = status.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var line in lines)
-        {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith('-'))
-            {
-                var parts = trimmed.TrimStart('-', ' ').Split(':');
-                if (parts.Length >= 2)
-                {
-                    var name = parts[0].Trim();
-                    var toolPart = parts[1].Trim();
-                    var toolCount = 0;
-                    var match = Regex.Match(toolPart, @"(\d+)");
-                    if (match.Success)
-                        int.TryParse(match.Groups[1].Value, out toolCount);
-
-                    servers.Add(new
-                    {
-                        name,
-                        connected = true,
-                        toolCount
-                    });
-                }
-            }
-        }
-        return servers;
-    }
 }

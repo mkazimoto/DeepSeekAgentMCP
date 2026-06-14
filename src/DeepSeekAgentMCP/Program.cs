@@ -1,6 +1,5 @@
 ﻿using DeepSeekAgentMCP;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -158,7 +157,8 @@ static async Task RunAsConsoleAsync()
     // --- Start Web Server or Console Mode ---
     if (webEnabled)
     {
-        await RunWebServerAsync(agent, webUrls ?? "http://localhost:5000", launchBrowser);
+        var sessionManager = new SessionManager(deepSeekClient, mcpManager);
+        await RunWebServerAsync(sessionManager, webUrls ?? "http://localhost:5000", launchBrowser);
     }
     else
     {
@@ -169,7 +169,7 @@ static async Task RunAsConsoleAsync()
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(DeepSeekAgent agent, string urls, bool launchBrowser)
+static async Task RunWebServerAsync(SessionManager sessionManager, string urls, bool launchBrowser)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n Starting web interface at {urls}");
@@ -203,7 +203,8 @@ static async Task RunWebServerAsync(DeepSeekAgent agent, string urls, bool launc
 
         try
         {
-            var response = await agent.ProcessMessageAsync(request.Message);
+            var sessionId = GetSessionId(request);
+            var response = await sessionManager.ProcessMessageAsync(sessionId, request.Message);
             return Results.Ok(new { response });
         }
         catch (Exception ex)
@@ -215,19 +216,20 @@ static async Task RunWebServerAsync(DeepSeekAgent agent, string urls, bool launc
     // GET /api/status — MCP server status
     app.MapGet("/api/status", () =>
     {
-        var status = agent.GetMcpStatus();
-        var servers = ParseMcpStatus(status);
+        // Status is global, not per-session
         return Results.Ok(new
         {
             model = "deepseek-chat",
-            mcpServers = servers
+            activeSessions = sessionManager.ActiveSessionCount,
+            mcpServers = new List<object>() // Status will be omitted or fetched differently
         });
     });
 
-    // GET /api/history — conversation history
-    app.MapGet("/api/history", () =>
+    // GET /api/history — conversation history for a session
+    app.MapGet("/api/history", (string? sessionId) =>
     {
-        var history = agent.GetConversationHistory();
+        var sid = sessionId ?? "default";
+        var history = sessionManager.GetHistory(sid);
         var messages = history.Select(m => new
         {
             role = m.Role,
@@ -237,10 +239,11 @@ static async Task RunWebServerAsync(DeepSeekAgent agent, string urls, bool launc
         return Results.Ok(new { history = messages });
     });
 
-    // POST /api/clear — clear conversation
-    app.MapPost("/api/clear", () =>
+    // POST /api/clear — clear conversation for a session
+    app.MapPost("/api/clear", (ChatRequest request) =>
     {
-        agent.ClearConversation();
+        var sessionId = GetSessionId(request);
+        sessionManager.ClearConversation(sessionId);
         return Results.Ok(new { success = true });
     });
 
@@ -261,6 +264,11 @@ static async Task RunWebServerAsync(DeepSeekAgent agent, string urls, bool launc
     }
 
     await app.RunAsync();
+}
+
+static string GetSessionId(ChatRequest request)
+{
+    return !string.IsNullOrWhiteSpace(request.SessionId) ? request.SessionId : "default";
 }
 
 // ===================================================================
@@ -377,42 +385,9 @@ static string GetEnvDeepSeekApiKey()
         ?? string.Empty;
 }
 
-static List<object> ParseMcpStatus(string status)
-{
-    var servers = new List<object>();
-    if (string.IsNullOrEmpty(status) || status == "No MCP servers connected.")
-        return servers;
-
-    var lines = status.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-    foreach (var line in lines)
-    {
-        var trimmed = line.Trim();
-        if (trimmed.StartsWith('-'))
-        {
-            var parts = trimmed.TrimStart('-', ' ').Split(':');
-            if (parts.Length >= 2)
-            {
-                var name = parts[0].Trim();
-                var toolPart = parts[1].Trim();
-                var toolCount = 0;
-                var match = Regex.Match(toolPart, @"(\d+)");
-                if (match.Success)
-                    int.TryParse(match.Groups[1].Value, out toolCount);
-
-                servers.Add(new
-                {
-                    name,
-                    connected = true,
-                    toolCount
-                });
-            }
-        }
-    }
-    return servers;
-}
-
 // --- Request Model ---
 public class ChatRequest
 {
     public string Message { get; set; } = string.Empty;
+    public string? SessionId { get; set; }
 }

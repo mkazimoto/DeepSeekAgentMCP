@@ -5,6 +5,13 @@
 class ChatApp {
     constructor() {
         this.isLoading = false;
+        // Generate a unique session ID per tab/instance
+        // This ensures each browser tab has its own isolated conversation
+        this.sessionId = crypto.randomUUID ? crypto.randomUUID() : 
+            'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
         this.initElements();
         this.restoreWelcomeMessage();
         this.initEventListeners();
@@ -174,7 +181,7 @@ class ChatApp {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ message: text, sessionId: this.sessionId })
             });
 
             if (!response.ok) {
@@ -334,7 +341,11 @@ class ChatApp {
 
     async clearConversation() {
         try {
-            await fetch('/api/clear', { method: 'POST' });
+            await fetch('/api/clear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: '', sessionId: this.sessionId })
+            });
             this.elements.messagesContainer.innerHTML = '';
             this.restoreWelcomeMessage();
             this.showToast('🧹 Conversa limpa');

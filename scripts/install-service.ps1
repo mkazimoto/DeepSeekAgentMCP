@@ -22,7 +22,7 @@ param(
     [string]$Action = "install"
 )
 
-$ServiceName = "DeepSeekAgentMCP"
+$ServiceName = "DeepSeekAgentMCP2"
 $DisplayName = "DeepSeek Agent MCP Service"
 $Description = "Agente inteligente DeepSeek com suporte a MCP (Model Context Protocol) para consultas a bancos de dados e ferramentas externas."
 $ProjectPath = Join-Path $PSScriptRoot "..\src\DeepSeekAgentMCP\DeepSeekAgentMCP.csproj"
