@@ -26,6 +26,7 @@ class ChatApp {
             messagesContainer: document.getElementById('messages-container'),
             messageInput: document.getElementById('message-input'),
             sendBtn: document.getElementById('send-btn'),
+            cancelBtn: document.getElementById('cancel-btn'),
             typingIndicator: document.getElementById('typing-indicator'),
             mcpStatus: document.getElementById('mcp-status'),
             modelName: document.getElementById('model-name'),
@@ -41,6 +42,7 @@ class ChatApp {
     initEventListeners() {
         // Send message
         this.elements.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.elements.cancelBtn.addEventListener('click', () => this.cancelRequest());
         this.elements.messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -184,6 +186,9 @@ class ChatApp {
                 body: JSON.stringify({ message: text, sessionId: this.sessionId })
             });
 
+            // If loading was already turned off (via cancel), don't process response
+            if (!this.isLoading) return;
+
             if (!response.ok) {
                 const errorData = await response.json().catch(() => null);
                 throw new Error(errorData?.error || `Erro ${response.status}: ${response.statusText}`);
@@ -191,7 +196,10 @@ class ChatApp {
 
             const data = await response.json();
 
-            // Hide typing indicator
+            // If loading was already turned off (via cancel), don't process response
+            if (!this.isLoading) return;
+
+            // Hide loading
             this.setLoading(false);
 
             // Add agent response
@@ -207,6 +215,7 @@ class ChatApp {
             }
 
         } catch (err) {
+            if (!this.isLoading) return;
             this.setLoading(false);
             this.addMessage(`Erro: ${err.message}`, 'error');
         }
@@ -396,12 +405,32 @@ class ChatApp {
 
 
 
+    // --- Cancel Request ---
+    async cancelRequest() {
+        try {
+            await fetch('/api/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: '', sessionId: this.sessionId })
+            });
+        } catch {
+            // Ignore errors on cancel
+        }
+        this.setLoading(false);
+        this.showToast('⏹️ Pedido cancelado');
+    }
+
     // --- UI Helpers ---
     setLoading(loading) {
         this.isLoading = loading;
         this.elements.sendBtn.disabled = loading;
         this.elements.messageInput.disabled = loading;
         this.elements.typingIndicator.style.display = loading ? 'flex' : 'none';
+
+        // Toggle between send and cancel buttons
+        this.elements.sendBtn.style.display = loading ? 'none' : 'flex';
+        this.elements.cancelBtn.style.display = loading ? 'flex' : 'none';
+
         if (loading) {
             this.elements.sendBtn.classList.add('loading');
         } else {

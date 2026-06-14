@@ -158,7 +158,7 @@ static async Task RunAsConsoleAsync()
     if (webEnabled)
     {
         var sessionManager = new SessionManager(deepSeekClient, mcpManager);
-        await RunWebServerAsync(sessionManager, webUrls ?? "http://localhost:5000", launchBrowser);
+        await RunWebServerAsync(sessionManager, mcpManager, webUrls ?? "http://localhost:5000", launchBrowser);
     }
     else
     {
@@ -169,7 +169,7 @@ static async Task RunAsConsoleAsync()
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(SessionManager sessionManager, string urls, bool launchBrowser)
+static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, string urls, bool launchBrowser)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n Starting web interface at {urls}");
@@ -216,12 +216,11 @@ static async Task RunWebServerAsync(SessionManager sessionManager, string urls, 
     // GET /api/status — MCP server status
     app.MapGet("/api/status", () =>
     {
-        // Status is global, not per-session
         return Results.Ok(new
         {
             model = "deepseek-chat",
             activeSessions = sessionManager.ActiveSessionCount,
-            mcpServers = new List<object>() // Status will be omitted or fetched differently
+            mcpServers = mcpManager.GetServerStatusList()
         });
     });
 
@@ -237,6 +236,14 @@ static async Task RunWebServerAsync(SessionManager sessionManager, string urls, 
             name = m.Name
         });
         return Results.Ok(new { history = messages });
+    });
+
+    // POST /api/cancel — cancel an active request for a session
+    app.MapPost("/api/cancel", (ChatRequest request) =>
+    {
+        var sessionId = GetSessionId(request);
+        sessionManager.CancelRequest(sessionId);
+        return Results.Ok(new { success = true });
     });
 
     // POST /api/clear — clear conversation for a session

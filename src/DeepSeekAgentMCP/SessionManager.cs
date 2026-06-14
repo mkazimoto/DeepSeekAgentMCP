@@ -12,6 +12,7 @@ namespace DeepSeekAgentMCP;
 public class SessionManager : IDisposable
 {
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeRequests = new(StringComparer.Ordinal);
     private readonly DeepSeekClient _deepSeekClient;
     private readonly McpToolManager _mcpToolManager;
     private readonly int _maxHistoryMessages;
@@ -48,81 +49,118 @@ public class SessionManager : IDisposable
     {
         var state = GetOrCreateSession(sessionId);
 
-        // Add user message to session history
-        state.History.Add(new ChatMessage
+        // Create a CancellationTokenSource linked to the caller's token
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var linkedToken = cts.Token;
+
+        // Store the CTS so it can be cancelled via CancelRequest
+        _activeRequests[sessionId] = cts;
+
+        try
         {
-            Role = "user",
-            Content = userMessage
-        });
-
-        state.LastAccess = DateTime.UtcNow;
-        TrimConversationHistory(state);
-
-        var tools = _mcpToolManager.GetToolDefinitions();
-
-        var maxIterations = 10;
-        var currentIteration = 0;
-
-        while (currentIteration < maxIterations)
-        {
-            currentIteration++;
-
-            DeepSeekChatResponse response;
-            try
+            // Add user message to session history
+            state.History.Add(new ChatMessage
             {
-                response = await _deepSeekClient.SendChatAsync(
-                    state.History,
-                    tools: tools.Count > 0 ? tools : null,
-                    toolChoice: null,
-                    cancellationToken: cancellationToken);
-            }
-            catch (HttpRequestException ex)
-            {
-                var error = $"Error communicating with DeepSeek API: {ex.Message}";
-                state.History.Add(new ChatMessage { Role = "assistant", Content = error });
-                return error;
-            }
+                Role = "user",
+                Content = userMessage
+            });
 
-            var choice = response.Choices.FirstOrDefault();
-            if (choice == null)
-            {
-                var error = "No response from DeepSeek.";
-                state.History.Add(new ChatMessage { Role = "assistant", Content = error });
-                return error;
-            }
+            state.LastAccess = DateTime.UtcNow;
+            TrimConversationHistory(state);
 
-            var message = choice.Message;
-            state.History.Add(message);
+            var tools = _mcpToolManager.GetToolDefinitions();
 
-            // Check if the model wants to call tools
-            if (message.ToolCalls is { Count: > 0 })
+            var maxIterations = 10;
+            var currentIteration = 0;
+
+            while (currentIteration < maxIterations)
             {
-                foreach (var toolCall in message.ToolCalls)
+                currentIteration++;
+
+                DeepSeekChatResponse response;
+                try
                 {
-                    Console.WriteLine($"[Session:{sessionId}] [Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                    var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
-
-                    Console.WriteLine($"[Session:{sessionId}] [Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
-
-                    state.History.Add(new ChatMessage
-                    {
-                        Role = "tool",
-                        ToolCallId = toolCall.Id,
-                        Name = toolCall.Function.Name,
-                        Content = toolResult
-                    });
+                    response = await _deepSeekClient.SendChatAsync(
+                        state.History,
+                        tools: tools.Count > 0 ? tools : null,
+                        toolChoice: null,
+                        cancellationToken: linkedToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    var cancelMsg = "O pedido foi cancelado pelo usuário.";
+                    state.History.Add(new ChatMessage { Role = "assistant", Content = cancelMsg });
+                    return cancelMsg;
+                }
+                catch (HttpRequestException ex)
+                {
+                    var error = $"Error communicating with DeepSeek API: {ex.Message}";
+                    state.History.Add(new ChatMessage { Role = "assistant", Content = error });
+                    return error;
                 }
 
-                TrimConversationHistory(state);
-                continue;
+                var choice = response.Choices.FirstOrDefault();
+                if (choice == null)
+                {
+                    var error = "No response from DeepSeek.";
+                    state.History.Add(new ChatMessage { Role = "assistant", Content = error });
+                    return error;
+                }
+
+                var message = choice.Message;
+                state.History.Add(message);
+
+                // Check if the model wants to call tools
+                if (message.ToolCalls is { Count: > 0 })
+                {
+                    foreach (var toolCall in message.ToolCalls)
+                    {
+                        linkedToken.ThrowIfCancellationRequested();
+
+                        Console.WriteLine($"[Session:{sessionId}] [Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+
+                        var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, linkedToken);
+
+                        Console.WriteLine($"[Session:{sessionId}] [Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
+
+                        state.History.Add(new ChatMessage
+                        {
+                            Role = "tool",
+                            ToolCallId = toolCall.Id,
+                            Name = toolCall.Function.Name,
+                            Content = toolResult
+                        });
+                    }
+
+                    TrimConversationHistory(state);
+                    continue;
+                }
+
+                // No tool calls - this is the final response
+                return message.Content;
             }
 
-            // No tool calls - this is the final response
-            return message.Content;
+            return "The agent reached the maximum number of iterations. Please try a simpler request.";
         }
+        finally
+        {
+            // Clean up the CTS
+            _activeRequests.TryRemove(sessionId, out _);
+            cts.Dispose();
+        }
+    }
 
-        return "The agent reached the maximum number of iterations. Please try a simpler request.";
+    /// <summary>
+    /// Cancels an active request for the specified session.
+    /// </summary>
+    public void CancelRequest(string sessionId)
+    {
+        if (_activeRequests.TryRemove(sessionId, out var cts))
+        {
+            Console.WriteLine($"[Session] Cancelling request for session: {sessionId}");
+            cts.Cancel();
+            cts.Dispose();
+        }
     }
 
     /// <summary>

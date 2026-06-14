@@ -216,6 +216,19 @@ public class McpToolManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Returns structured server status data for the web API.
+    /// </summary>
+    public List<object> GetServerStatusList()
+    {
+        return _clients.Select(wrapper => (object)new
+        {
+            name = wrapper.ServerName,
+            connected = true,
+            toolCount = wrapper.Tools.Count
+        }).ToList();
+    }
+
+    /// <summary>
     /// Converts an MCP JSON schema to a plain object for the DeepSeek API.
     /// </summary>
     private static object ConvertMcpSchemaToObject(JsonElement? schema)
