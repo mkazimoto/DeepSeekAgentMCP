@@ -7,58 +7,14 @@ Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo 
 ## Estrutura esperada da tabela
 
 - Uma coluna de ID (PK) identifica cada registro
-- Uma coluna de ID pai (FK) referencia o ID do registro pai
-
-## Template SQL
-
-```sql
-WITH CTE_RECURSIVO AS (
-    -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
-    SELECT
-        CODCOLIGADA,
-        IDPRJ,
-        [ID],
-        [IDPAI],
-        0 AS NIVEL
-    FROM [TABELA] (NOLOCK)
-    WHERE CODCOLIGADA = 1
-      AND IDPRJ = 2
-      AND [ID] = 126
-
-    UNION ALL
-
-    -- Passo recursivo: busca os filhos de cada tarefa encontrada
-    SELECT
-        t.CODCOLIGADA,
-        t.IDPRJ,
-        t.[ID],
-        t.[IDPAI],
-        c.NIVEL + 1 AS NIVEL
-    FROM [TABELA] t (NOLOCK)
-    INNER JOIN CTE_RECURSIVO c
-        ON t.CODCOLIGADA = c.CODCOLIGADA
-       AND t.IDPRJ = c.IDPRJ
-       AND t.[IDPAI] = c.[ID]
-       AND t.[IDPAI] <> t.[ID]
-    WHERE
-       c.NIVEL < 10 -- Nível máximo
-)
-SELECT
-    CODCOLIGADA,
-    IDPRJ,
-    [ID],
-    [IDPAI],
-    NIVEL
-FROM CTE_RECURSIVO
-OPTION (MAXRECURSION 10)    
-```
+- Uma coluna de IDPAI (FK) referencia o ID do registro pai
 
 ## Exemplo prático (MTAREFA)
 
 Tabela com auto-relacionamento: `IDPAI` → `IDTRF` (ambos na mesma tabela `MTAREFA`).
 Pedido: Listar a hierarquia de todas as tarefas da tarefa 126 do projeto 2 e coligada 1.
 
-```sql
+```sql server
 WITH CTE_RECURSIVO AS (
     -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
     SELECT
@@ -90,9 +46,9 @@ WITH CTE_RECURSIVO AS (
         ON t.CODCOLIGADA = c.CODCOLIGADA
        AND t.IDPRJ = c.IDPRJ
        AND t.IDPAI = c.IDTRF
-       AND t.IDPAI <> t.IDTRF
+       AND t.IDPAI <> t.IDTRF -- a tarefa raiz tem os 2 campos iguais
     WHERE
-        c.NIVEL < 10 -- Nível máximo
+        c.NIVEL < 10 -- Evita recursão infinita
 )
 SELECT
     CODCOLIGADA,
@@ -110,9 +66,11 @@ OPTION (MAXRECURSION 10)
 
 ## Regras importantes
 
-1. **Sempre use `UNION ALL`** entre âncora e parte recursiva
-2. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
-3. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
-4. **`(NOLOCK)`** recomendado para consultas de leitura em produção
-5. **Limite de profundidade** (opcional): `WHERE c.NIVEL < 10` para evitar recursão infinita
-6. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
+1. **`t.IDPAI <> t.IDTRF`** é necessário para evitar recursão infinita
+2. **`c.NIVEL < 10`** é necessário para evitar recursão infinita
+3. **`OPTION (MAXRECURSION 10)`** é necessário para evitar recursão infinita
+4. **Sempre use `UNION ALL`** entre âncora e parte recursiva
+5. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
+6. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
+7. **`(NOLOCK)`** recomendado para consultas de leitura em produção
+8. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
