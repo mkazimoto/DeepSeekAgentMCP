@@ -393,8 +393,8 @@ class ChatApp {
                     <p>Exemplo:</p>
                     <p>* Listar todos os lançamentos financeiros a receber inadimplentes.</p>
                     <p>* Listar os funcionários ativos agrupados por faixa etária de 10 em 10 anos.</p>
-                    <p>* Gere o diagrama de relacionamento das tabelas MTAREFA, MISM, MCMP, MRECCMP.</p>
                     <p>* Listar toda a hieraquia da tarefa codigo = '004' do projeto codigo = '0000' e coligada 1.</p>
+                    <p>* Gere o diagrama de relacionamento das tabelas MTAREFA, MISM, MCMP, MRECCMP.</p>
                     <p>* Listar os top 10 clientes inadimplentes de vendas de imóveis.</p>
                     <p>* Listar os top 10 alunos do ensino superior inadimplentes.</p>
                 </div>
