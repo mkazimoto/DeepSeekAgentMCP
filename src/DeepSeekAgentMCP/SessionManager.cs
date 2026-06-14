@@ -19,18 +19,26 @@ public class SessionManager : IDisposable
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(30);
 
-    private const string SystemPrompt = """
-        You are an intelligent agent with access to MCP (Model Context Protocol) tools.
-        You can use these tools to perform various tasks like reading files, fetching web pages,
-        managing code, and more. Always analyze the user's request and use the appropriate tools
-        when needed. If you don't need tools, just respond directly.
+    private static readonly string SystemPrompt = BuildSystemPrompt();
 
-        When calling tools, use the exact tool name as provided. Pass the correct arguments
-        based on the tool's schema.
+    private static string BuildSystemPrompt()
+    {
+        var basePrompt = """
+            You are an intelligent agent with access to MCP (Model Context Protocol) tools.
+            You can use these tools to perform various tasks like reading files, fetching web pages,
+            managing code, and more. Always analyze the user's request and use the appropriate tools
+            when needed. If you don't need tools, just respond directly.
 
-        You can call multiple tools in sequence if needed to fulfill a complex request.
-        After you receive tool results, synthesize them into a helpful response for the user.
-        """;
+            When calling tools, use the exact tool name as provided. Pass the correct arguments
+            based on the tool's schema.
+
+            You can call multiple tools in sequence if needed to fulfill a complex request.
+            After you receive tool results, synthesize them into a helpful response for the user.
+            """;
+
+        var skillsContent = SkillLoader.LoadSkillsToPrompt();
+        return basePrompt + skillsContent;
+    }
 
     public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager, int maxHistoryMessages = 50)
     {
