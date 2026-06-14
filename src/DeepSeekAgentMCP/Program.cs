@@ -87,7 +87,7 @@ static async Task RunAsConsoleAsync()
         apiKey = deepSeekConfig.TryGetProperty("ApiKey", out var apiKeyProp)
             ? apiKeyProp.GetString() ?? string.Empty
             : string.Empty;
-        model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-chat";
+        model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-v4-flash";
         maxTokens = deepSeekConfig.GetProperty("MaxTokens").GetInt32();
         temperature = deepSeekConfig.GetProperty("Temperature").GetDouble();
 
@@ -104,7 +104,7 @@ static async Task RunAsConsoleAsync()
     {
         Console.WriteLine("Config file not found. Using environment variables or defaults.");
         apiKey = GetEnvDeepSeekApiKey();
-        model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-chat";
+        model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-v4-flash";
         maxTokens = 4096;
         temperature = 0.7;
     }
@@ -218,7 +218,7 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
     {
         return Results.Ok(new
         {
-            model = "deepseek-chat",
+            model = "deepseek-v4-flash",
             activeSessions = sessionManager.ActiveSessionCount,
             mcpServers = mcpManager.GetServerStatusList()
         });

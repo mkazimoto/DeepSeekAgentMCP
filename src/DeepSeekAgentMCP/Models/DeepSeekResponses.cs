@@ -8,7 +8,7 @@ namespace DeepSeekAgentMCP.Models;
 public class DeepSeekChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = "deepseek-chat";
+    public string Model { get; set; } = "deepseek-v4-flash";
 
     [JsonPropertyName("messages")]
     public List<ChatMessage> Messages { get; set; } = [];
@@ -32,6 +32,23 @@ public class DeepSeekChatRequest
     [JsonPropertyName("tool_choice")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ToolChoice { get; set; }
+
+    [JsonPropertyName("thinking")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ThinkingConfig? Thinking { get; set; }
+
+    [JsonPropertyName("reasoning_effort")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReasoningEffort { get; set; }
+}
+
+/// <summary>
+/// Configuration for DeepSeek thinking/reasoning mode.
+/// </summary>
+public class ThinkingConfig
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "enabled";
 }
 
 /// <summary>

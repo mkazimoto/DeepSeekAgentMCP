@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DeepSeekAgentMCP.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -39,6 +40,9 @@ public class DeepSeekAgentService : BackgroundService
             double temperature;
             string webUrls = "http://localhost:5000";
 
+            ThinkingConfig? thinkingConfig = null;
+            string? reasoningEffort = null;
+
             if (!string.IsNullOrEmpty(configPath))
             {
                 var configJson = await File.ReadAllTextAsync(configPath, stoppingToken);
@@ -48,9 +52,21 @@ public class DeepSeekAgentService : BackgroundService
                 apiKey = deepSeekConfig.TryGetProperty("ApiKey", out var apiKeyProp)
                     ? apiKeyProp.GetString() ?? string.Empty
                     : string.Empty;
-                model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-chat";
+                model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-v4-flash";
                 maxTokens = deepSeekConfig.GetProperty("MaxTokens").GetInt32();
                 temperature = deepSeekConfig.GetProperty("Temperature").GetDouble();
+
+                if (deepSeekConfig.TryGetProperty("Thinking", out var thinkingProp))
+                {
+                    var type = thinkingProp.GetProperty("type").GetString();
+                    if (!string.IsNullOrEmpty(type))
+                        thinkingConfig = new ThinkingConfig { Type = type };
+                }
+
+                if (deepSeekConfig.TryGetProperty("ReasoningEffort", out var reasoningProp))
+                {
+                    reasoningEffort = reasoningProp.GetString();
+                }
 
                 if (doc.RootElement.TryGetProperty("WebServer", out var webConfig))
                 {
@@ -62,7 +78,7 @@ public class DeepSeekAgentService : BackgroundService
             else
             {
                 apiKey = GetEnvDeepSeekApiKey();
-                model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-chat";
+                model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-v4-flash";
                 maxTokens = 4096;
                 temperature = 0.7;
             }
@@ -95,7 +111,7 @@ public class DeepSeekAgentService : BackgroundService
                 mcpConfigFullPath = Path.GetFullPath(Path.Combine(projectRoot, mcpConfigRelPath));
             }
 
-            var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature);
+            var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature, thinkingConfig, reasoningEffort);
             var mcpManager = new McpToolManager(mcpConfigFullPath);
             var sessionManager = new SessionManager(deepSeekClient, mcpManager);
 

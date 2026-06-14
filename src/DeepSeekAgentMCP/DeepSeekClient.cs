@@ -15,15 +15,19 @@ public class DeepSeekClient : IDisposable
     private readonly string _model;
     private readonly int _maxTokens;
     private readonly double _temperature;
+    private readonly ThinkingConfig? _thinking;
+    private readonly string? _reasoningEffort;
 
     private const string BaseUrl = "https://api.deepseek.com";
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-chat", int maxTokens = 4096, double temperature = 0.7)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null)
     {
         _apiKey = apiKey;
         _model = model;
         _maxTokens = maxTokens;
         _temperature = temperature;
+        _thinking = thinking;
+        _reasoningEffort = reasoningEffort;
 
         _httpClient = new HttpClient
         {
@@ -50,7 +54,9 @@ public class DeepSeekClient : IDisposable
             Temperature = _temperature,
             Stream = false,
             Tools = tools,
-            ToolChoice = toolChoice
+            ToolChoice = toolChoice,
+            Thinking = _thinking,
+            ReasoningEffort = _reasoningEffort
         };
 
         var json = JsonSerializer.Serialize(request);
@@ -79,7 +85,9 @@ public class DeepSeekClient : IDisposable
             MaxTokens = _maxTokens,
             Temperature = _temperature,
             Stream = true,
-            Tools = tools
+            Tools = tools,
+            Thinking = _thinking,
+            ReasoningEffort = _reasoningEffort
         };
 
         var json = JsonSerializer.Serialize(request);
