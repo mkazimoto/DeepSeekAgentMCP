@@ -7,6 +7,7 @@ Use esta skill quando o usuário solicitar um **diagrama**, **esquema**, **relac
 - "Mostre a estrutura das tabelas ..."
 - "Faça um diagrama entidade-relacionamento ..."
 - "Como as tabelas X, Y, Z se relacionam?"
+- **Sempre que você gerar uma consulta SQL que contém JOIN entre tabelas** — você DEVE automaticamente incluir o diagrama ER das tabelas envolvidas, mesmo que o usuário não tenha pedido explicitamente.
 
 ## Formato de saída OBRIGATÓRIO
 
