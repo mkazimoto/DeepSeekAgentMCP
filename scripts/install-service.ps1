@@ -123,10 +123,11 @@ function Install-Service {
 
     Write-Info "Instalando serviço '$ServiceName'..."
     
-    # Create the service
+    # Create the service with dependency on TotvsRmDatabaseMcpServer2
     & sc.exe create $ServiceName `
         binPath="$exePath --service" `
         start=auto `
+        depend=totvsrmdatabasemcpserver2.exe `
         DisplayName=$DisplayName 2>&1 | Out-Null
 
     if ($LASTEXITCODE -ne 0) {
