@@ -84,6 +84,37 @@ class ChatApp {
                 this.copyCodeContent(btn);
             }
         });
+
+        // Mermaid diagram toolbar buttons
+        this.elements.messagesContainer.addEventListener('click', (e) => {
+            const fullscreenBtn = e.target.closest('[data-fullscreen-diagram]');
+            if (fullscreenBtn) {
+                const diagramId = fullscreenBtn.dataset.fullscreenDiagram;
+                this.openDiagramFullscreen(diagramId);
+                return;
+            }
+
+            const exportBtn = e.target.closest('[data-export-diagram]');
+            if (exportBtn) {
+                const diagramId = exportBtn.dataset.exportDiagram;
+                this.exportDiagramAsSvg(diagramId);
+                return;
+            }
+        });
+
+        // Fullscreen modal close
+        document.getElementById('mermaid-modal-close').addEventListener('click', () => this.closeDiagramFullscreen());
+        document.getElementById('mermaid-modal-export').addEventListener('click', () => this.exportFullscreenDiagram());
+        document.getElementById('mermaid-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('mermaid-modal-backdrop')) {
+                this.closeDiagramFullscreen();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeDiagramFullscreen();
+            }
+        });
     }
 
     // --- Theme ---
@@ -369,7 +400,16 @@ class ChatApp {
                     const isDetectedMermaid = !isExplicitMermaid && this.isMermaidContent(trimmed);
 
                     if (isExplicitMermaid || isDetectedMermaid) {
-                        return `<div class="mermaid-wrapper"><div class="mermaid">${trimmed}</div></div>`;
+                        const diagramId = 'd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                        const fullscreenIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+                        const exportIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+                        return `<div class="mermaid-wrapper" data-diagram-id="${diagramId}">
+                            <div class="mermaid-toolbar">
+                                <button class="mermaid-btn mermaid-fullscreen-btn" data-fullscreen-diagram="${diagramId}" title="Visualizar em tela cheia">${fullscreenIcon} Tela cheia</button>
+                                <button class="mermaid-btn mermaid-export-btn" data-export-diagram="${diagramId}" title="Exportar diagrama como SVG">${exportIcon} Exportar</button>
+                            </div>
+                            <div class="mermaid">${trimmed}</div>
+                        </div>`;
                     }
                     // Non-mermaid: return unchanged for code block wrapping below
                     return match;
@@ -623,6 +663,114 @@ class ChatApp {
                 this.showToast('❌ Erro ao copiar');
             }
         }
+    }
+
+    // --- Diagram Fullscreen ---
+    openDiagramFullscreen(diagramId) {
+        const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
+        if (!wrapper) return;
+
+        const mermaidEl = wrapper.querySelector('.mermaid');
+        if (!mermaidEl) return;
+
+        const modal = document.getElementById('mermaid-modal');
+        const modalBody = document.getElementById('mermaid-modal-body');
+
+        // Clone the rendered SVG or the raw mermaid source
+        const svg = mermaidEl.querySelector('svg');
+        if (svg) {
+            const clone = svg.cloneNode(true);
+            // Ensure the SVG has proper attributes for standalone display
+            clone.removeAttribute('width');
+            clone.removeAttribute('height');
+            clone.setAttribute('viewBox', svg.getAttribute('viewBox') || `0 0 ${svg.getAttribute('width') || 800} ${svg.getAttribute('height') || 600}`);
+            clone.style.maxWidth = '100%';
+            clone.style.maxHeight = '100%';
+            clone.style.width = 'auto';
+            clone.style.height = 'auto';
+            modalBody.innerHTML = '';
+            modalBody.appendChild(clone);
+        } else {
+            // Fallback: show raw mermaid source
+            modalBody.innerHTML = `<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;color:var(--text-primary);background:var(--bg-secondary);padding:16px;border-radius:8px;max-width:100%;overflow:auto;">${this.escapeHtml(mermaidEl.textContent || '')}</pre>`;
+        }
+
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        this._fullscreenDiagramId = diagramId;
+
+        // Re-flow to trigger animation
+        requestAnimationFrame(() => {
+            modal.classList.add('open');
+        });
+    }
+
+    closeDiagramFullscreen() {
+        const modal = document.getElementById('mermaid-modal');
+        modal.classList.remove('open');
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+        this._fullscreenDiagramId = null;
+    }
+
+    // --- Diagram Export ---
+    exportDiagramAsSvg(diagramId) {
+        const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
+        if (!wrapper) return;
+
+        const mermaidEl = wrapper.querySelector('.mermaid');
+        if (!mermaidEl) return;
+
+        const svg = mermaidEl.querySelector('svg');
+        if (!svg) {
+            this.showToast('❌ Diagrama ainda não renderizado');
+            return;
+        }
+
+        this.downloadSvg(svg, `diagrama-${diagramId}.svg`);
+    }
+
+    exportFullscreenDiagram() {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const svg = modalBody.querySelector('svg');
+        if (!svg) {
+            this.showToast('❸ Nenhum diagrama para exportar');
+            return;
+        }
+        this.downloadSvg(svg, `diagrama-${this._fullscreenDiagramId || 'exportado'}.svg`);
+    }
+
+    downloadSvg(svgElement, filename) {
+        // Clone the SVG to avoid modifying the original
+        const clone = svgElement.cloneNode(true);
+
+        // Ensure inline CSS from style tags is included
+        const styles = svgElement.querySelectorAll('style');
+        styles.forEach(s => {
+            clone.appendChild(s.cloneNode(true));
+        });
+
+        // Serialize to string
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(clone);
+
+        // Create proper SVG document with XML declaration
+        const svgBlob = new Blob([
+            '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
+            svgString
+        ], { type: 'image/svg+xml;charset=utf-8' });
+
+        const url = URL.createObjectURL(svgBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        this.showToast('✅ Diagrama exportado como SVG');
     }
 
     escapeHtml(text) {

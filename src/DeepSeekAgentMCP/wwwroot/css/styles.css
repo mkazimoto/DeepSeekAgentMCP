@@ -1005,18 +1005,19 @@ body {
    ============================================ */
 .mermaid-wrapper {
     margin: 16px 0;
-    padding: 16px;
+    padding: 0;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow-x: auto;
-    display: flex;
-    justify-content: center;
 }
 
 .mermaid-wrapper .mermaid {
     max-width: 100%;
     overflow: visible;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
 }
 
 .mermaid-wrapper .mermaid svg {
@@ -1056,4 +1057,227 @@ body {
     border-radius: var(--radius-sm);
     width: 100%;
     overflow-x: auto;
+}
+
+/* ============================================
+   Mermaid Toolbar
+   ============================================ */
+.mermaid-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.mermaid-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.mermaid-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.mermaid-btn:active {
+    transform: scale(0.96);
+}
+
+.mermaid-btn svg {
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Mermaid Fullscreen Modal
+   ============================================ */
+.mermaid-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-modal.open {
+    animation: modal-fade-in 0.2s ease-out;
+}
+
+@keyframes modal-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.mermaid-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.mermaid-modal-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 92vw;
+    height: 90vh;
+    max-width: 1400px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    animation: modal-content-in 0.25s ease-out;
+}
+
+@keyframes modal-content-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.mermaid-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.mermaid-modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mermaid-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mermaid-modal-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.mermaid-modal-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.mermaid-modal-btn:active {
+    transform: scale(0.96);
+}
+
+.mermaid-modal-btn svg {
+    flex-shrink: 0;
+}
+
+.mermaid-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.mermaid-modal-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.mermaid-modal-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: auto;
+    background: var(--bg-secondary);
+}
+
+.mermaid-modal-body svg {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+}
+
+[data-theme="dark"] .mermaid-modal-content {
+    background: #0f172a;
+    border-color: #1e293b;
+}
+
+[data-theme="dark"] .mermaid-modal-header {
+    background: #1a2332;
+    border-color: #1e293b;
+}
+
+[data-theme="dark"] .mermaid-modal-body {
+    background: #0a0f1a;
+}
+
+[data-theme="dark"] .mermaid-modal-backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+/* Responsive: smaller padding on mobile */
+@media (max-width: 768px) {
+    .mermaid-modal-content {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
+    .mermaid-modal-body {
+        padding: 12px;
+    }
+
+    .mermaid-modal-btn span {
+        display: none;
+    }
 }
