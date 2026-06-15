@@ -140,6 +140,27 @@
             <div class="mermaid-modal-header">
                 <span class="mermaid-modal-title">Diagrama</span>
                 <div class="mermaid-modal-actions">
+                    <div class="zoom-controls">
+                        <button class="mermaid-modal-btn zoom-btn" id="zoom-out" title="Reduzir zoom">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                        <span class="zoom-level" id="zoom-level">100%</span>
+                        <button class="mermaid-modal-btn zoom-btn" id="zoom-in" title="Aumentar zoom">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                        <button class="mermaid-modal-btn zoom-reset-btn" id="zoom-reset" title="Redefinir zoom">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                <path d="M3 3v5h5"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="zoom-controls-separator"></div>
                     <button class="mermaid-modal-btn" id="mermaid-modal-export" title="Exportar diagrama como SVG">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

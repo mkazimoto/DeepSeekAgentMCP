@@ -1229,21 +1229,119 @@ body {
     color: var(--text-primary);
 }
 
-.mermaid-modal-body {
-    flex: 1;
+/* Zoom Controls */
+.zoom-controls {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 24px;
-    overflow: auto;
-    background: var(--bg-secondary);
+    gap: 4px;
 }
 
-.mermaid-modal-body svg {
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
+.zoom-controls-separator {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color);
+    margin: 0 4px;
+}
+
+.zoom-btn {
+    width: 32px !important;
+    height: 32px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.zoom-reset-btn {
+    padding: 5px 8px !important;
+}
+
+.zoom-level {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
+.mermaid-modal-body {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    background: var(--bg-secondary);
+    cursor: grab;
+}
+
+.mermaid-modal-body.dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.mermaid-modal-body::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.mermaid-modal-body::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.mermaid-modal-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+    border: 2px solid var(--bg-tertiary);
+}
+
+.mermaid-modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+.mermaid-modal-body::-webkit-scrollbar-corner {
+    background: var(--bg-tertiary);
+}
+
+.mermaid-diagram-container {
+    position: relative;
+    transform-origin: 0 0;
+    transition: transform 0.15s ease-out;
+    padding: 40px;
+    display: inline-block;
+    min-width: 100%;
+    min-height: 100%;
+}
+
+.mermaid-diagram-container svg {
+    display: block;
+    margin: 0 auto;
+}
+
+.mermaid-diagram-container.zooming {
+    transition: transform 0.15s ease-out;
+}
+
+/* Zoom info tooltip */
+.zoom-info {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 10;
+}
+
+.zoom-info.show {
+    opacity: 1;
 }
 
 [data-theme="dark"] .mermaid-modal-content {

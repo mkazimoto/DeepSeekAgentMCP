@@ -676,6 +676,11 @@ class ChatApp {
         const modal = document.getElementById('mermaid-modal');
         const modalBody = document.getElementById('mermaid-modal-body');
 
+        // Reset zoom state
+        this._zoomLevel = 1;
+        this._zoomMax = 5;
+        this._zoomMin = 0.1;
+
         // Clone the rendered SVG or the raw mermaid source
         const svg = mermaidEl.querySelector('svg');
         if (svg) {
@@ -684,12 +689,17 @@ class ChatApp {
             clone.removeAttribute('width');
             clone.removeAttribute('height');
             clone.setAttribute('viewBox', svg.getAttribute('viewBox') || `0 0 ${svg.getAttribute('width') || 800} ${svg.getAttribute('height') || 600}`);
-            clone.style.maxWidth = '100%';
-            clone.style.maxHeight = '100%';
+            clone.style.maxWidth = 'none';
+            clone.style.maxHeight = 'none';
             clone.style.width = 'auto';
             clone.style.height = 'auto';
+
+            // Create container for zoom/pan
+            const container = document.createElement('div');
+            container.className = 'mermaid-diagram-container';
+            container.appendChild(clone);
             modalBody.innerHTML = '';
-            modalBody.appendChild(clone);
+            modalBody.appendChild(container);
         } else {
             // Fallback: show raw mermaid source
             modalBody.innerHTML = `<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;color:var(--text-primary);background:var(--bg-secondary);padding:16px;border-radius:8px;max-width:100%;overflow:auto;">${this.escapeHtml(mermaidEl.textContent || '')}</pre>`;
@@ -702,6 +712,8 @@ class ChatApp {
         // Re-flow to trigger animation
         requestAnimationFrame(() => {
             modal.classList.add('open');
+            this.updateZoomLevelDisplay();
+            this.setupZoomEvents(modal);
         });
     }
 
@@ -711,6 +723,152 @@ class ChatApp {
         modal.style.display = 'none';
         document.body.style.overflow = '';
         this._fullscreenDiagramId = null;
+        this._zoomLevel = 1;
+        this.cleanupZoomEvents(modal);
+    }
+
+    // --- Zoom Controls ---
+    setupZoomEvents(modal) {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const zoomIn = document.getElementById('zoom-in');
+        const zoomOut = document.getElementById('zoom-out');
+        const zoomReset = document.getElementById('zoom-reset');
+        const container = modalBody.querySelector('.mermaid-diagram-container');
+
+        if (!container) return;
+
+        this._zoomInHandler = () => this.zoomDiagram(0.25);
+        this._zoomOutHandler = () => this.zoomDiagram(-0.25);
+        this._zoomResetHandler = () => this.resetZoom();
+        this._wheelHandler = (e) => this.handleZoomWheel(e);
+        this._dragStartHandler = (e) => this.handleDragStart(e);
+        this._dragMoveHandler = (e) => this.handleDragMove(e);
+        this._dragEndHandler = () => this.handleDragEnd();
+
+        zoomIn.addEventListener('click', this._zoomInHandler);
+        zoomOut.addEventListener('click', this._zoomOutHandler);
+        zoomReset.addEventListener('click', this._zoomResetHandler);
+        modalBody.addEventListener('wheel', this._wheelHandler, { passive: false });
+        modalBody.addEventListener('mousedown', this._dragStartHandler);
+        document.addEventListener('mousemove', this._dragMoveHandler);
+        document.addEventListener('mouseup', this._dragEndHandler);
+    }
+
+    cleanupZoomEvents(modal) {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const zoomIn = document.getElementById('zoom-in');
+        const zoomOut = document.getElementById('zoom-out');
+        const zoomReset = document.getElementById('zoom-reset');
+
+        if (this._zoomInHandler) zoomIn.removeEventListener('click', this._zoomInHandler);
+        if (this._zoomOutHandler) zoomOut.removeEventListener('click', this._zoomOutHandler);
+        if (this._zoomResetHandler) zoomReset.removeEventListener('click', this._zoomResetHandler);
+        if (this._wheelHandler) modalBody.removeEventListener('wheel', this._wheelHandler);
+        if (this._dragStartHandler) modalBody.removeEventListener('mousedown', this._dragStartHandler);
+        if (this._dragMoveHandler) document.removeEventListener('mousemove', this._dragMoveHandler);
+        if (this._dragEndHandler) document.removeEventListener('mouseup', this._dragEndHandler);
+
+        this._zoomInHandler = null;
+        this._zoomOutHandler = null;
+        this._zoomResetHandler = null;
+        this._wheelHandler = null;
+        this._dragStartHandler = null;
+        this._dragMoveHandler = null;
+        this._dragEndHandler = null;
+        this._isDragging = false;
+    }
+
+    zoomDiagram(delta) {
+        const newZoom = Math.max(this._zoomMin, Math.min(this._zoomMax, this._zoomLevel + delta));
+        if (newZoom === this._zoomLevel) return;
+        this._zoomLevel = newZoom;
+        this.applyZoom();
+    }
+
+    applyZoom() {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const container = modalBody.querySelector('.mermaid-diagram-container');
+        if (!container) return;
+
+        const pct = Math.round(this._zoomLevel * 100);
+        container.style.transform = `scale(${this._zoomLevel})`;
+        this.updateZoomLevelDisplay();
+
+        // Show zoom indicator briefly
+        const existing = modalBody.querySelector('.zoom-info');
+        if (existing) existing.remove();
+
+        const info = document.createElement('div');
+        info.className = 'zoom-info show';
+        info.textContent = `${pct}%`;
+        modalBody.appendChild(info);
+        clearTimeout(this._zoomInfoTimeout);
+        this._zoomInfoTimeout = setTimeout(() => {
+            info.classList.remove('show');
+            setTimeout(() => info.remove(), 200);
+        }, 1000);
+    }
+
+    resetZoom() {
+        this._zoomLevel = 1;
+        this.applyZoom();
+        // Also reset scroll position
+        const modalBody = document.getElementById('mermaid-modal-body');
+        modalBody.scrollLeft = 0;
+        modalBody.scrollTop = 0;
+    }
+
+    updateZoomLevelDisplay() {
+        const zoomLevelEl = document.getElementById('zoom-level');
+        if (zoomLevelEl) {
+            zoomLevelEl.textContent = `${Math.round(this._zoomLevel * 100)}%`;
+        }
+    }
+
+    handleZoomWheel(e) {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const container = modalBody.querySelector('.mermaid-diagram-container');
+        if (!container) return;
+
+        // Zoom with Ctrl+Scroll
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            this.zoomDiagram(delta);
+        }
+    }
+
+    handleDragStart(e) {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const container = modalBody.querySelector('.mermaid-diagram-container');
+        if (!container) return;
+
+        // Only drag with left mouse button, and only when zoomed
+        if (e.button !== 0) return;
+
+        this._isDragging = true;
+        this._dragStartX = e.clientX;
+        this._dragStartY = e.clientY;
+        this._scrollStartX = modalBody.scrollLeft;
+        this._scrollStartY = modalBody.scrollTop;
+        modalBody.classList.add('dragging');
+    }
+
+    handleDragMove(e) {
+        if (!this._isDragging) return;
+
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const dx = e.clientX - this._dragStartX;
+        const dy = e.clientY - this._dragStartY;
+        modalBody.scrollLeft = this._scrollStartX - dx;
+        modalBody.scrollTop = this._scrollStartY - dy;
+    }
+
+    handleDragEnd() {
+        if (!this._isDragging) return;
+        this._isDragging = false;
+        const modalBody = document.getElementById('mermaid-modal-body');
+        modalBody.classList.remove('dragging');
     }
 
     // --- Diagram Export ---
