@@ -18,6 +18,7 @@ class ChatApp {
         this.initTheme();
         this.loadMcpStatus();
         this.autoResizeTextarea();
+        this.initMermaid();
     }
 
     // --- DOM Elements ---
@@ -108,6 +109,8 @@ class ChatApp {
             localStorage.setItem('deepseek-theme', 'dark');
             this.updateThemeIcons(true);
         }
+        // Re-initialize Mermaid with correct theme
+        this.initMermaid();
     }
 
     updateThemeIcons(isDark) {
@@ -272,6 +275,10 @@ class ChatApp {
         div.appendChild(content);
 
         container.appendChild(div);
+
+        // Render Mermaid diagrams after element is in the DOM
+        this.renderMermaidDiagrams(textDiv);
+
         this.scrollToBottom();
     }
 
@@ -306,6 +313,34 @@ class ChatApp {
         this.scrollToBottom();
     }
 
+    // --- Check if text is Mermaid diagram content ---
+    isMermaidContent(text) {
+        if (!text) return false;
+        const firstLine = text.split('\n')[0].trim();
+        const mermaidKeywords = [
+            'erDiagram',
+            'graph ', 'graph\t',
+            'flowchart ', 'flowchart\t',
+            'sequenceDiagram',
+            'classDiagram',
+            'stateDiagram', 'stateDiagram-v2',
+            'gantt',
+            'pie',
+            'journey',
+            'gitgraph',
+            'mindmap',
+            'timeline',
+            'zenuml',
+            'sankey-beta',
+            'xyChart', 'xychart',
+            'block',
+            'packet',
+            'kanban',
+            'architecture-beta',
+        ];
+        return mermaidKeywords.some(keyword => firstLine.startsWith(keyword));
+    }
+
     // --- Format Message (Markdown renderer via marked) ---
     formatMessage(text) {
         if (!text) return '';
@@ -324,7 +359,24 @@ class ChatApp {
             // Open external links in new tab
             html = html.replace(/<a href=/g, '<a target="_blank" rel="noopener" href=');
 
-            // Add copy button to code blocks
+            // Step 1: Convert ALL code blocks that contain Mermaid content to mermaid divs
+            // This handles both explicit ```mermaid and generic ``` blocks with diagram content
+            html = html.replace(
+                /<pre><code(?: class="([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g,
+                (match, lang, content) => {
+                    const trimmed = content.trim();
+                    const isExplicitMermaid = lang && lang.includes('language-mermaid');
+                    const isDetectedMermaid = !isExplicitMermaid && this.isMermaidContent(trimmed);
+
+                    if (isExplicitMermaid || isDetectedMermaid) {
+                        return `<div class="mermaid-wrapper"><div class="mermaid">${trimmed}</div></div>`;
+                    }
+                    // Non-mermaid: return unchanged for code block wrapping below
+                    return match;
+                }
+            );
+
+            // Step 2: Add copy button to remaining (non-mermaid) code blocks
             html = html.replace(
                 /<pre><code(?: class="([^"]*)")?>/g,
                 (match, lang) => {
@@ -363,6 +415,50 @@ class ChatApp {
             this.showToast('🧹 Conversa limpa');
         } catch (err) {
             this.showToast('❌ Erro ao limpar conversa');
+        }
+    }
+
+    // --- Initialize Mermaid ---
+    initMermaid() {
+        if (typeof mermaid === 'undefined') return;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: isDark ? 'dark' : 'base',
+            themeVariables: isDark ? {
+                primaryColor: '#1e293b',
+                primaryTextColor: '#f1f5f9',
+                primaryBorderColor: '#334155',
+                lineColor: '#818cf8',
+                secondaryColor: '#0f172a',
+                tertiaryColor: '#334155',
+                fontSize: '14px',
+            } : {
+                primaryColor: '#eef2ff',
+                primaryTextColor: '#111827',
+                primaryBorderColor: '#e5e7eb',
+                lineColor: '#4F46E5',
+                secondaryColor: '#ffffff',
+                tertiaryColor: '#f3f4f6',
+                fontSize: '14px',
+            },
+        });
+    }
+
+    // --- Render Mermaid Diagrams ---
+    renderMermaidDiagrams(container) {
+        if (typeof mermaid === 'undefined') return;
+        const mermaidElements = container.querySelectorAll('.mermaid:not(.rendered)');
+        if (mermaidElements.length === 0) return;
+
+        try {
+            mermaid.run({
+                nodes: Array.from(mermaidElements),
+                suppressErrors: true,
+            });
+            mermaidElements.forEach(el => el.classList.add('rendered'));
+        } catch (e) {
+            console.warn('Mermaid render error:', e);
         }
     }
 

@@ -23,6 +23,36 @@ public static class SkillLoader
     }
 
     /// <summary>
+    /// Carrega o arquivo instructions.md que contém as instruções base do sistema.
+    /// Procura no diretório de saída ou no diretório do projeto (modo dev).
+    /// </summary>
+    public static string LoadInstructions()
+    {
+        var searchPaths = new[]
+        {
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "instructions.md")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "instructions.md"))
+        };
+
+        foreach (var path in searchPaths)
+        {
+            if (File.Exists(path))
+            {
+                try
+                {
+                    return File.ReadAllText(path).Trim();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[SkillLoader] Error loading {path}: {ex.Message}");
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
     /// Retorna o conteúdo de todas as skills encontradas como um único bloco de texto,
     /// pronto para ser inserido no System Prompt.
     /// </summary>

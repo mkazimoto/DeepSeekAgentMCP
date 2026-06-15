@@ -78,6 +78,23 @@ function Install-Service {
         Write-Host "[WARN] Pasta Skills não encontrada em: $skillsSrc" -ForegroundColor Yellow
     }
 
+    # Copy instructions.md to publish if not exists
+    $instructionsSrc = "$PSScriptRoot\..\src\DeepSeekAgentMCP\instructions.md"
+    $instructionsDst = "$PSScriptRoot\..\publish\instructions.md"
+    if (-not (Test-Path $instructionsDst)) {
+        if (Test-Path $instructionsSrc) {
+            Write-Info "Copiando instructions.md para publish..."
+            Copy-Item -Path $instructionsSrc -Destination $instructionsDst -Force
+            Write-Success "instructions.md copiado com sucesso."
+        }
+        else {
+            Write-Host "[WARN] instructions.md não encontrado em: $instructionsSrc" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Info "instructions.md já existe em publish, mantendo versão atual."
+    }
+
     $exePath = "$PSScriptRoot\..\publish\DeepSeekAgentMCP.exe"
 
     if (-not (Test-Path $exePath)) {

@@ -999,3 +999,47 @@ body {
         font-size: 14px;
     }
 }
+
+/* ============================================
+   Mermaid Diagram Styles
+   ============================================ */
+.mermaid-wrapper {
+    margin: 16px 0;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    display: flex;
+    justify-content: center;
+}
+
+.mermaid-wrapper .mermaid {
+    max-width: 100%;
+    overflow: visible;
+}
+
+.mermaid-wrapper .mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Mermaid dark theme adjustments */
+[data-theme="dark"] .mermaid-wrapper {
+    background: #0f172a;
+    border-color: #1e293b;
+}
+
+/* Mermaid loading state */
+.mermaid-wrapper .mermaid.loading {
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    font-size: 13px;
+}
+
+.mermaid-wrapper .mermaid.loading::after {
+    content: 'Renderizando diagrama...';
+}
