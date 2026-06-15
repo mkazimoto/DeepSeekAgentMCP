@@ -176,13 +176,14 @@ public class DeepSeekAgentService : BackgroundService
                 }
             });
 
-            // GET /api/status — MCP server status
+            // GET /api/status — MCP server status + connected servers
             app.MapGet("/api/status", () =>
             {
                 return Results.Ok(new
                 {
                     model = model,
-                    activeSessions = sessionManager.ActiveSessionCount
+                    activeSessions = sessionManager.ActiveSessionCount,
+                    mcpServers = mcpManager.GetServerStatusList()
                 });
             });
 

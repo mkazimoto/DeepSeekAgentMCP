@@ -446,19 +446,30 @@ class ChatApp {
     }
 
     // --- Render Mermaid Diagrams ---
-    renderMermaidDiagrams(container) {
+    async renderMermaidDiagrams(container) {
         if (typeof mermaid === 'undefined') return;
         const mermaidElements = container.querySelectorAll('.mermaid:not(.rendered)');
         if (mermaidElements.length === 0) return;
 
-        try {
-            mermaid.run({
-                nodes: Array.from(mermaidElements),
-                suppressErrors: true,
-            });
-            mermaidElements.forEach(el => el.classList.add('rendered'));
-        } catch (e) {
-            console.warn('Mermaid render error:', e);
+        for (const el of mermaidElements) {
+            try {
+                const diagramText = el.textContent || '';
+                // Validate syntax first
+                const valid = await mermaid.parse(diagramText, { suppressErrors: true });
+                if (!valid) {
+                    console.warn('Mermaid parse error for diagram, showing raw source');
+                    el.classList.add('rendered', 'mermaid-error');
+                    continue;
+                }
+                // Render using unique id
+                const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                const { svg } = await mermaid.render(id, diagramText);
+                el.innerHTML = svg;
+                el.classList.add('rendered');
+            } catch (e) {
+                console.warn('Mermaid render error:', e);
+                el.classList.add('rendered', 'mermaid-error');
+            }
         }
     }
 

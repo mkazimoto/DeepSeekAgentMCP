@@ -55,6 +55,15 @@ function Show-Status {
 }
 
 function Install-Service {
+    # Stop service first if running (prevents file lock issues during build)
+    $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($existingService -and $existingService.Status -eq 'Running') {
+        Write-Info "Parando serviço '$ServiceName' antes da compilação..."
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        Write-Success "Serviço parado."
+    }
+
     Write-Info "Compilando o projeto..."
     
     # Build the project in Release mode
