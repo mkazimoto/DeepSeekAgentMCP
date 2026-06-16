@@ -4,14 +4,10 @@
 
 Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo para tabelas que possuem auto-relacionamento (uma coluna que referencia a própria tabela, como `IDPAI → ID`).
 
-## Estrutura esperada da tabela
-
-- Uma coluna de ID (PK) identifica cada registro
-- Uma coluna de IDPAI (FK) referencia o ID do registro pai
-
 ## Exemplo prático (MTAREFA)
 
 Tabela com auto-relacionamento: `IDPAI` → `IDTRF` (ambos na mesma tabela `MTAREFA`).
+
 Pedido: Listar a hierarquia de todas as tarefas da tarefa 126 do projeto 2 e coligada 1.
 
 ```sql server
