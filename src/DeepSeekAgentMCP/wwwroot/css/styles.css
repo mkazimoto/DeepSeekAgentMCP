@@ -1006,7 +1006,7 @@ body {
 .mermaid-wrapper {
     margin: 16px 0;
     padding: 0;
-    background: var(--bg-secondary);
+    background: #000000;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow-x: auto;
@@ -1027,7 +1027,7 @@ body {
 
 /* Mermaid dark theme adjustments */
 [data-theme="dark"] .mermaid-wrapper {
-    background: #0f172a;
+    background: #000000;
     border-color: #1e293b;
 }
 
@@ -1139,7 +1139,7 @@ body {
     width: 92vw;
     height: 90vh;
     max-width: 1400px;
-    background: var(--bg-primary);
+    background: #000000;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
@@ -1270,7 +1270,7 @@ body {
     flex: 1;
     position: relative;
     overflow: auto;
-    background: var(--bg-secondary);
+    background: #000000;
     cursor: grab;
 }
 
@@ -1345,7 +1345,7 @@ body {
 }
 
 [data-theme="dark"] .mermaid-modal-content {
-    background: #0f172a;
+    background: #000000;
     border-color: #1e293b;
 }
 
@@ -1355,7 +1355,7 @@ body {
 }
 
 [data-theme="dark"] .mermaid-modal-body {
-    background: #0a0f1a;
+    background: #000000;
 }
 
 [data-theme="dark"] .mermaid-modal-backdrop {

@@ -472,6 +472,7 @@ class ChatApp {
                 lineColor: '#818cf8',
                 secondaryColor: '#0f172a',
                 tertiaryColor: '#334155',
+                background: '#000000',
                 fontSize: '14px',
             } : {
                 primaryColor: '#eef2ff',
@@ -480,6 +481,7 @@ class ChatApp {
                 lineColor: '#4F46E5',
                 secondaryColor: '#ffffff',
                 tertiaryColor: '#f3f4f6',
+                background: '#000000',
                 fontSize: '14px',
             },
         });
@@ -907,6 +909,24 @@ class ChatApp {
         styles.forEach(s => {
             clone.appendChild(s.cloneNode(true));
         });
+
+        // Add black background rectangle as the first child of the SVG
+        const viewBox = clone.getAttribute('viewBox') || '';
+        let width = clone.getAttribute('width') || '800';
+        let height = clone.getAttribute('height') || '600';
+        // Use viewBox dimensions if available
+        const vbParts = viewBox.split(/\s+/);
+        if (vbParts.length === 4) {
+            width = vbParts[2];
+            height = vbParts[3];
+        }
+        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bgRect.setAttribute('width', width);
+        bgRect.setAttribute('height', height);
+        bgRect.setAttribute('fill', '#000000');
+        bgRect.setAttribute('x', '0');
+        bgRect.setAttribute('y', '0');
+        clone.insertBefore(bgRect, clone.firstChild);
 
         // Serialize to string
         const serializer = new XMLSerializer();
