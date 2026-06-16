@@ -48,7 +48,7 @@ WITH CTE_RECURSIVO AS (
        AND t.IDPAI = c.IDTRF
        AND t.IDPAI <> t.IDTRF -- a tarefa raiz tem os 2 campos iguais
     WHERE
-        c.NIVEL < 10 -- Evita recursão infinita
+        c.NIVEL < 20 -- Evita recursão infinita
 )
 SELECT
     CODCOLIGADA,
@@ -61,14 +61,14 @@ SELECT
 FROM CTE_RECURSIVO
 ORDER BY 
     CODTRF
-OPTION (MAXRECURSION 10)
+OPTION (MAXRECURSION 20)
 ```
 
 ## Regras importantes
 
 1. **`t.IDPAI <> t.IDTRF`** é necessário para evitar recursão infinita
-2. **`c.NIVEL < 10`** é necessário para evitar recursão infinita
-3. **`OPTION (MAXRECURSION 10)`** é necessário para evitar recursão infinita
+2. **`c.NIVEL < 20`** é necessário para evitar recursão infinita
+3. **`OPTION (MAXRECURSION 20)`** é necessário para evitar recursão infinita
 4. **Sempre use `UNION ALL`** entre âncora e parte recursiva
 5. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
 6. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo

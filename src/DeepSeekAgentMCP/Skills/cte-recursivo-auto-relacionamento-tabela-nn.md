@@ -6,7 +6,7 @@ Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo 
 
 ## Exemplo prático (MRECCMP)
 
-Tabela n para n com auto-relacionamento para a tabela MCMP: `IDCMPFILHA` → `IDCMP` (ambos na mesma tabela `MCMP`).
+Tabela MRECCMP n para n com auto-relacionamento para a tabela MCMP: `IDCMPFILHA` → `IDCMP` (ambos na mesma tabela `MCMP`).
 Pedido: Listar toda a hierarquia de recursos da tarefas da tarefa 122 do projeto 2 e coligada 1.
 
 ```sql server
@@ -93,5 +93,13 @@ ORDER BY
   H.IDCMPFILHA
 OPTION (MAXRECURSION 20)
 ```
+## Regras importantes
 
+1. **`c.NIVEL < 20`** é necessário para evitar recursão infinita
+2. **`OPTION (MAXRECURSION 20)`** é necessário para evitar recursão infinita
+3. **Sempre use `UNION ALL`** entre âncora e parte recursiva
+4. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
+5. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
+6. **`(NOLOCK)`** recomendado para consultas de leitura em produção
+7. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
 
