@@ -12,6 +12,7 @@ public static partial class SkillLoader
 {
     private static readonly string? _baseDirectory;
     private static string? _cachedSkillsPrompt;
+    private static string? _cachedInstructions;
     private static DateTime _lastCacheLoad = DateTime.MinValue;
     private static FileSystemWatcher? _fileWatcher;
     private static readonly ReaderWriterLockSlim _cacheLock = new();
@@ -29,15 +30,41 @@ public static partial class SkillLoader
 
     /// <summary>
     /// Carrega o arquivo instructions.md que contém as instruções base do sistema.
+    /// Utiliza cache com invalidação automática via FileSystemWatcher.
     /// </summary>
     public static string LoadInstructions()
     {
+        // Retorna cache se disponível (leitura concorrente)
+        _cacheLock.EnterReadLock();
+        try
+        {
+            if (_cachedInstructions != null)
+                return _cachedInstructions;
+        }
+        finally
+        {
+            _cacheLock.ExitReadLock();
+        }
+
         var path = PathHelper.FindInstructionsFile();
         if (path != null)
         {
             try
             {
-                return File.ReadAllText(path).Trim();
+                var content = File.ReadAllText(path).Trim();
+
+                // Atualiza cache (escrita exclusiva)
+                _cacheLock.EnterWriteLock();
+                try
+                {
+                    _cachedInstructions = content;
+                }
+                finally
+                {
+                    _cacheLock.ExitWriteLock();
+                }
+
+                return content;
             }
             catch (Exception ex)
             {
@@ -141,6 +168,7 @@ public static partial class SkillLoader
         try
         {
             _cachedSkillsPrompt = null;
+            _cachedInstructions = null;
         }
         finally
         {

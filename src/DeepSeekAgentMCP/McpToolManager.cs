@@ -51,6 +51,7 @@ public class McpServersConfig
 public class McpToolManager : IAsyncDisposable
 {
     private readonly List<McpClientWrapper> _clients = [];
+    private readonly object _clientsLock = new();
     private readonly string _configPath;
 
     public McpToolManager(string configPath)
@@ -111,7 +112,10 @@ public class McpToolManager : IAsyncDisposable
                 var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
 
                 var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
-                _clients.Add(new McpClientWrapper(serverConfig.Name, client, tools));
+                lock (_clientsLock)
+                {
+                    _clients.Add(new McpClientWrapper(serverConfig.Name, client, tools));
+                }
 
                 Console.WriteLine($"[MCP] Connected to '{serverConfig.Name}' with {tools.Count} tool(s).");
                 foreach (var tool in tools)
@@ -125,7 +129,10 @@ public class McpToolManager : IAsyncDisposable
             }
         }
 
-        Console.WriteLine($"[MCP] Total connected servers: {_clients.Count}");
+        lock (_clientsLock)
+        {
+            Console.WriteLine($"[MCP] Total connected servers: {_clients.Count}");
+        }
     }
 
     /// <summary>
@@ -134,8 +141,14 @@ public class McpToolManager : IAsyncDisposable
     public List<ToolDefinition> GetToolDefinitions()
     {
         var definitions = new List<ToolDefinition>();
+        List<McpClientWrapper> snapshot;
 
-        foreach (var wrapper in _clients)
+        lock (_clientsLock)
+        {
+            snapshot = [.. _clients];
+        }
+
+        foreach (var wrapper in snapshot)
         {
             foreach (var tool in wrapper.Tools)
             {
@@ -160,9 +173,15 @@ public class McpToolManager : IAsyncDisposable
     public async Task<string> ExecuteToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken = default)
     {
         var functionName = toolCall.Function.Name;
+        List<McpClientWrapper> snapshot;
+
+        lock (_clientsLock)
+        {
+            snapshot = [.. _clients];
+        }
 
         // Find the server and tool by matching {ServerName}_{ToolName}
-        foreach (var wrapper in _clients)
+        foreach (var wrapper in snapshot)
         {
             var prefix = $"{wrapper.ServerName}_";
 
@@ -205,10 +224,17 @@ public class McpToolManager : IAsyncDisposable
     /// </summary>
     public string GetStatusSummary()
     {
-        if (_clients.Count == 0) return "No MCP servers connected.";
+        List<McpClientWrapper> snapshot;
 
-        var lines = new List<string> { $"MCP Servers ({_clients.Count} connected):" };
-        foreach (var wrapper in _clients)
+        lock (_clientsLock)
+        {
+            snapshot = [.. _clients];
+        }
+
+        if (snapshot.Count == 0) return "No MCP servers connected.";
+
+        var lines = new List<string> { $"MCP Servers ({snapshot.Count} connected):" };
+        foreach (var wrapper in snapshot)
         {
             lines.Add($"  - {wrapper.ServerName}: {wrapper.Tools.Count} tool(s)");
         }
@@ -220,7 +246,14 @@ public class McpToolManager : IAsyncDisposable
     /// </summary>
     public List<object> GetServerStatusList()
     {
-        return _clients.Select(wrapper => (object)new
+        List<McpClientWrapper> snapshot;
+
+        lock (_clientsLock)
+        {
+            snapshot = [.. _clients];
+        }
+
+        return snapshot.Select(wrapper => (object)new
         {
             name = wrapper.ServerName,
             connected = true,
@@ -242,7 +275,15 @@ public class McpToolManager : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var wrapper in _clients)
+        List<McpClientWrapper> snapshot;
+
+        lock (_clientsLock)
+        {
+            snapshot = [.. _clients];
+            _clients.Clear();
+        }
+
+        foreach (var wrapper in snapshot)
         {
             try
             {
@@ -253,7 +294,6 @@ public class McpToolManager : IAsyncDisposable
                 Console.WriteLine($"[MCP] Error disposing '{wrapper.ServerName}': {ex.Message}");
             }
         }
-        _clients.Clear();
     }
 
     /// <summary>

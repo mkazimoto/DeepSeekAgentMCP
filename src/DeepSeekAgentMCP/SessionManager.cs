@@ -11,6 +11,7 @@ public class SessionManager : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeRequests = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new(StringComparer.Ordinal);
     private readonly DeepSeekClient _deepSeekClient;
     private readonly McpToolManager _mcpToolManager;
     private readonly Timer _cleanupTimer;
@@ -31,21 +32,31 @@ public class SessionManager : IAsyncDisposable
     /// </summary>
     public async Task<string> ProcessMessageAsync(string sessionId, string userMessage, CancellationToken cancellationToken = default)
     {
-        var state = GetOrCreateSession(sessionId);
-
-        // Create a CancellationTokenSource linked to the caller's token
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _activeRequests[sessionId] = cts;
+        var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+        await sessionLock.WaitAsync(cancellationToken);
 
         try
         {
-            state.LastAccess = DateTime.UtcNow;
-            return await state.Agent.ProcessMessageAsync(userMessage, cts.Token);
+            var state = GetOrCreateSession(sessionId);
+
+            // Create a CancellationTokenSource linked to the caller's token
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _activeRequests[sessionId] = cts;
+
+            try
+            {
+                state.LastAccess = DateTime.UtcNow;
+                return await state.Agent.ProcessMessageAsync(userMessage, cts.Token);
+            }
+            finally
+            {
+                _activeRequests.TryRemove(sessionId, out _);
+                cts.Dispose();
+            }
         }
         finally
         {
-            _activeRequests.TryRemove(sessionId, out _);
-            cts.Dispose();
+            sessionLock.Release();
         }
     }
 
@@ -57,32 +68,42 @@ public class SessionManager : IAsyncDisposable
         Action<string>? onChunk = null,
         CancellationToken cancellationToken = default)
     {
-        var state = GetOrCreateSession(sessionId);
-
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _activeRequests[sessionId] = cts;
+        var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+        await sessionLock.WaitAsync(cancellationToken);
 
         try
         {
-            state.LastAccess = DateTime.UtcNow;
+            var state = GetOrCreateSession(sessionId);
 
-            // Subscribe to streaming output
-            void Handler(string chunk) => onChunk?.Invoke(chunk);
-            state.Agent.OnStreamingOutput += Handler;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _activeRequests[sessionId] = cts;
 
             try
             {
-                return await state.Agent.ProcessMessageStreamingAsync(userMessage, cts.Token);
+                state.LastAccess = DateTime.UtcNow;
+
+                // Subscribe to streaming output
+                void Handler(string chunk) => onChunk?.Invoke(chunk);
+                state.Agent.OnStreamingOutput += Handler;
+
+                try
+                {
+                    return await state.Agent.ProcessMessageStreamingAsync(userMessage, cts.Token);
+                }
+                finally
+                {
+                    state.Agent.OnStreamingOutput -= Handler;
+                }
             }
             finally
             {
-                state.Agent.OnStreamingOutput -= Handler;
+                _activeRequests.TryRemove(sessionId, out _);
+                cts.Dispose();
             }
         }
         finally
         {
-            _activeRequests.TryRemove(sessionId, out _);
-            cts.Dispose();
+            sessionLock.Release();
         }
     }
 
@@ -101,13 +122,28 @@ public class SessionManager : IAsyncDisposable
 
     /// <summary>
     /// Clears the conversation history for a session (keeps system prompt).
+    /// Aguarda o semáforo da sessão para evitar race condition com ProcessMessageAsync.
     /// </summary>
-    public void ClearConversation(string sessionId)
+    public async Task ClearConversationAsync(string sessionId)
     {
-        if (_sessions.TryGetValue(sessionId, out var state))
+        SemaphoreSlim? sessionLock = null;
+        if (_sessionLocks.TryGetValue(sessionId, out var found))
         {
-            state.Agent.ClearConversation();
-            state.LastAccess = DateTime.UtcNow;
+            sessionLock = found;
+            await sessionLock.WaitAsync();
+        }
+
+        try
+        {
+            if (_sessions.TryGetValue(sessionId, out var state))
+            {
+                state.Agent.ClearConversation();
+                state.LastAccess = DateTime.UtcNow;
+            }
+        }
+        finally
+        {
+            sessionLock?.Release();
         }
     }
 
@@ -131,6 +167,13 @@ public class SessionManager : IAsyncDisposable
         if (_sessions.TryRemove(sessionId, out var state))
         {
             Console.WriteLine($"[Session] Removed session: {sessionId}");
+
+            // Remove e dispose do semáforo da sessão
+            if (_sessionLocks.TryRemove(sessionId, out var sessionLock))
+            {
+                sessionLock.Dispose();
+            }
+
             // Fire-and-forget dispose do agente
             _ = DisposeAgentAsync(state.Agent);
             return true;
@@ -170,6 +213,13 @@ public class SessionManager : IAsyncDisposable
             if (_sessions.TryRemove(id, out var state))
             {
                 Console.WriteLine($"[Session] Cleaned up stale session: {id}");
+
+                // Remove e dispose do semáforo da sessão
+                if (_sessionLocks.TryRemove(id, out var sessionLock))
+                {
+                    sessionLock.Dispose();
+                }
+
                 // Dispose do agente (fire-and-forget dentro do timer)
                 _ = DisposeAgentAsync(state.Agent);
             }
@@ -190,6 +240,15 @@ public class SessionManager : IAsyncDisposable
         _disposed = true;
 
         _cleanupTimer.Dispose();
+
+        // Dispose all session semaphores
+        foreach (var kvp in _sessionLocks)
+        {
+            if (_sessionLocks.TryRemove(kvp.Key, out var semaphore))
+            {
+                semaphore.Dispose();
+            }
+        }
 
         // Dispose all agents
         var agents = _sessions.Values.Select(s => s.Agent).ToList();

@@ -14,6 +14,8 @@ public class DeepSeekAgent : IAsyncDisposable
     private readonly List<ChatMessage> _conversationHistory = [];
     private readonly int _maxHistoryMessages;
     private readonly bool _streamingEnabled;
+    private readonly object _historyLock = new();
+    private readonly object _eventLock = new();
 
     private static readonly string SystemPrompt = BuildSystemPrompt();
 
@@ -24,10 +26,16 @@ public class DeepSeekAgent : IAsyncDisposable
         return basePrompt + skillsContent;
     }
 
+    private Action<string>? _streamingHandler;
+
     /// <summary>
     /// Event raised when the agent produces streaming output.
     /// </summary>
-    public event Action<string>? OnStreamingOutput;
+    public event Action<string>? OnStreamingOutput
+    {
+        add { lock (_eventLock) _streamingHandler += value; }
+        remove { lock (_eventLock) _streamingHandler -= value; }
+    }
 
     public DeepSeekAgent(
         DeepSeekClient deepSeek,
@@ -40,11 +48,14 @@ public class DeepSeekAgent : IAsyncDisposable
         _maxHistoryMessages = maxHistoryMessages;
         _streamingEnabled = streamingEnabled;
 
-        _conversationHistory.Add(new ChatMessage
+        lock (_historyLock)
         {
-            Role = "system",
-            Content = SystemPrompt
-        });
+            _conversationHistory.Add(new ChatMessage
+            {
+                Role = "system",
+                Content = SystemPrompt
+            });
+        }
     }
 
     /// <summary>
@@ -63,14 +74,17 @@ public class DeepSeekAgent : IAsyncDisposable
     public async Task<string> ProcessMessageAsync(string userMessage, CancellationToken cancellationToken = default)
     {
         // Add user message to history
-        _conversationHistory.Add(new ChatMessage
+        lock (_historyLock)
         {
-            Role = "user",
-            Content = userMessage
-        });
+            _conversationHistory.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = userMessage
+            });
 
-        // Truncate history if needed (always keep system prompt)
-        TrimConversationHistory();
+            // Truncate history if needed (always keep system prompt)
+            TrimConversationHistory();
+        }
 
         // Get tool definitions from MCP
         var tools = _mcpToolManager.GetToolDefinitions();
@@ -96,13 +110,19 @@ public class DeepSeekAgent : IAsyncDisposable
             catch (OperationCanceledException)
             {
                 var cancelMsg = "O pedido foi cancelado pelo usuário.";
-                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = cancelMsg });
+                lock (_historyLock)
+                {
+                    _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = cancelMsg });
+                }
                 return cancelMsg;
             }
             catch (HttpRequestException ex)
             {
                 var error = $"Error communicating with DeepSeek API: {ex.Message}";
-                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = error });
+                lock (_historyLock)
+                {
+                    _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = error });
+                }
                 return error;
             }
 
@@ -110,14 +130,20 @@ public class DeepSeekAgent : IAsyncDisposable
             if (choice == null)
             {
                 var error = "No response from DeepSeek.";
-                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = error });
+                lock (_historyLock)
+                {
+                    _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = error });
+                }
                 return error;
             }
 
             var message = choice.Message;
 
             // Add assistant message to history
-            _conversationHistory.Add(message);
+            lock (_historyLock)
+            {
+                _conversationHistory.Add(message);
+            }
 
             // Check if the model wants to call tools
             if (message.ToolCalls is { Count: > 0 })
@@ -133,17 +159,23 @@ public class DeepSeekAgent : IAsyncDisposable
                     Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
 
                     // Add tool result to conversation
-                    _conversationHistory.Add(new ChatMessage
+                    lock (_historyLock)
                     {
-                        Role = "tool",
-                        ToolCallId = toolCall.Id,
-                        Name = toolCall.Function.Name,
-                        Content = toolResult
-                    });
+                        _conversationHistory.Add(new ChatMessage
+                        {
+                            Role = "tool",
+                            ToolCallId = toolCall.Id,
+                            Name = toolCall.Function.Name,
+                            Content = toolResult
+                        });
+                    }
                 }
 
                 // Trim history after adding tool results
-                TrimConversationHistory();
+                lock (_historyLock)
+                {
+                    TrimConversationHistory();
+                }
                 continue;
             }
 
@@ -162,13 +194,16 @@ public class DeepSeekAgent : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        _conversationHistory.Add(new ChatMessage
+        lock (_historyLock)
         {
-            Role = "user",
-            Content = userMessage
-        });
+            _conversationHistory.Add(new ChatMessage
+            {
+                Role = "user",
+                Content = userMessage
+            });
 
-        TrimConversationHistory();
+            TrimConversationHistory();
+        }
         var tools = _mcpToolManager.GetToolDefinitions();
 
         // First, let's check if the model needs to make tool calls.
@@ -182,7 +217,10 @@ public class DeepSeekAgent : IAsyncDisposable
         if (choice == null) return "No response from DeepSeek.";
 
         var message = choice.Message;
-        _conversationHistory.Add(message);
+        lock (_historyLock)
+        {
+            _conversationHistory.Add(message);
+        }
 
         // Handle tool calls if any
         if (message.ToolCalls is { Count: > 0 })
@@ -196,16 +234,22 @@ public class DeepSeekAgent : IAsyncDisposable
                 var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
                 Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}...");
 
-                _conversationHistory.Add(new ChatMessage
+                lock (_historyLock)
                 {
-                    Role = "tool",
-                    ToolCallId = toolCall.Id,
-                    Name = toolCall.Function.Name,
-                    Content = toolResult
-                });
+                    _conversationHistory.Add(new ChatMessage
+                    {
+                        Role = "tool",
+                        ToolCallId = toolCall.Id,
+                        Name = toolCall.Function.Name,
+                        Content = toolResult
+                    });
+                }
             }
 
-            TrimConversationHistory();
+            lock (_historyLock)
+            {
+                TrimConversationHistory();
+            }
 
             // After tool calls, stream the final response
             var fullContent = new StringBuilder();
@@ -213,11 +257,16 @@ public class DeepSeekAgent : IAsyncDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 fullContent.Append(chunk);
-                OnStreamingOutput?.Invoke(chunk);
+                Action<string>? handler;
+                lock (_eventLock) handler = _streamingHandler;
+                handler?.Invoke(chunk);
             }
 
             var result = fullContent.ToString();
-            _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = result });
+            lock (_historyLock)
+            {
+                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = result });
+            }
             return result;
         }
 
@@ -230,13 +279,18 @@ public class DeepSeekAgent : IAsyncDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 fullContent.Append(chunk);
-                OnStreamingOutput?.Invoke(chunk);
+                Action<string>? handler;
+                lock (_eventLock) handler = _streamingHandler;
+                handler?.Invoke(chunk);
             }
 
             // Replace the non-streaming message with streamed content
-            _conversationHistory.Remove(message);
             var streamedContent = fullContent.ToString();
-            _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = streamedContent });
+            lock (_historyLock)
+            {
+                _conversationHistory.Remove(message);
+                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = streamedContent });
+            }
             return streamedContent;
         }
 
@@ -253,19 +307,30 @@ public class DeepSeekAgent : IAsyncDisposable
     /// </summary>
     public void ClearConversation()
     {
-        var systemMessage = _conversationHistory[0];
-        _conversationHistory.Clear();
-        _conversationHistory.Add(systemMessage);
+        lock (_historyLock)
+        {
+            var systemMessage = _conversationHistory[0];
+            _conversationHistory.Clear();
+            _conversationHistory.Add(systemMessage);
+        }
     }
 
     /// <summary>
     /// Returns the conversation history (excluding system prompt).
     /// </summary>
-    public IReadOnlyList<ChatMessage> GetConversationHistory() =>
-        _conversationHistory.Skip(1).ToList().AsReadOnly();
+    public IReadOnlyList<ChatMessage> GetConversationHistory()
+    {
+        lock (_historyLock)
+        {
+            return _conversationHistory.Skip(1).ToList().AsReadOnly();
+        }
+    }
 
     private void TrimConversationHistory()
     {
+        // NOTE: Este método é SEMPRE chamado dentro de lock(_historyLock)
+        // O lock é reentrante (Monitor), então é seguro ser chamado dentro
+        // de um bloco lock(_historyLock) já existente.
         if (_conversationHistory.Count <= _maxHistoryMessages) return;
 
         // Keep the system prompt, remove oldest messages
