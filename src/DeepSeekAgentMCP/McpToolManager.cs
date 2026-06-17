@@ -63,6 +63,11 @@ public class McpToolManager : IAsyncDisposable
     private readonly TimeSpan _healthCheckInterval = TimeSpan.FromMinutes(2);
     private bool _disposed;
 
+    // Cached tool definitions with TTL
+    private List<ToolDefinition>? _cachedToolDefinitions;
+    private DateTime _cacheExpiry = DateTime.MinValue;
+    private readonly object _cacheLock = new();
+
     public McpToolManager(string configPath)
     {
         _configPath = configPath;
@@ -222,9 +227,16 @@ public class McpToolManager : IAsyncDisposable
 
     /// <summary>
     /// Gets all discovered tools as DeepSeek-compatible tool definitions.
+    /// Uses a cache with configurable TTL (default: 30s) to avoid recomputation.
     /// </summary>
-    public List<ToolDefinition> GetToolDefinitions()
+    public List<ToolDefinition> GetToolDefinitions(int cacheTtlSeconds = 30)
     {
+        lock (_cacheLock)
+        {
+            if (_cachedToolDefinitions is not null && DateTime.UtcNow < _cacheExpiry)
+                return _cachedToolDefinitions;
+        }
+
         var definitions = new List<ToolDefinition>();
         List<McpClientWrapper> snapshot;
 
@@ -249,7 +261,25 @@ public class McpToolManager : IAsyncDisposable
             }
         }
 
+        lock (_cacheLock)
+        {
+            _cachedToolDefinitions = definitions;
+            _cacheExpiry = DateTime.UtcNow.AddSeconds(cacheTtlSeconds);
+        }
+
         return definitions;
+    }
+
+    /// <summary>
+    /// Invalidates the tool definitions cache (e.g., after reconnection).
+    /// </summary>
+    public void InvalidateToolCache()
+    {
+        lock (_cacheLock)
+        {
+            _cachedToolDefinitions = null;
+            _cacheExpiry = DateTime.MinValue;
+        }
     }
 
     /// <summary>

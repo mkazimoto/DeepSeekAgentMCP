@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
@@ -15,6 +16,9 @@ public class DeepSeekAgent : IAsyncDisposable
     private readonly int _maxHistoryMessages;
     private readonly bool _streamingEnabled;
     private readonly bool _continueOnToolError;
+    private readonly bool _parallelToolCalls;
+    private readonly bool _summarizeHistory;
+    private readonly int _toolCacheTtlSeconds;
     private readonly object _historyLock = new();
     private readonly object _eventLock = new();
 
@@ -43,13 +47,19 @@ public class DeepSeekAgent : IAsyncDisposable
         McpToolManager mcpToolManager,
         int maxHistoryMessages = 50,
         bool streamingEnabled = true,
-        bool continueOnToolError = true)
+        bool continueOnToolError = true,
+        bool parallelToolCalls = true,
+        bool summarizeHistory = false,
+        int toolCacheTtlSeconds = 30)
     {
         _deepSeek = deepSeek;
         _mcpToolManager = mcpToolManager;
         _maxHistoryMessages = maxHistoryMessages;
         _streamingEnabled = streamingEnabled;
         _continueOnToolError = continueOnToolError;
+        _parallelToolCalls = parallelToolCalls;
+        _summarizeHistory = summarizeHistory;
+        _toolCacheTtlSeconds = toolCacheTtlSeconds;
 
         lock (_historyLock)
         {
@@ -89,8 +99,14 @@ public class DeepSeekAgent : IAsyncDisposable
             TrimConversationHistory();
         }
 
-        // Get tool definitions from MCP
-        var tools = _mcpToolManager.GetToolDefinitions();
+        // Optionally summarize old history to preserve context
+        if (_summarizeHistory)
+        {
+            await SummarizeOldHistoryAsync(cancellationToken);
+        }
+
+        // Get tool definitions from MCP (with cache)
+        var tools = _mcpToolManager.GetToolDefinitions(_toolCacheTtlSeconds);
 
         var maxIterations = 10;
         var currentIteration = 0;
@@ -152,51 +168,94 @@ public class DeepSeekAgent : IAsyncDisposable
             if (message.ToolCalls is { Count: > 0 })
             {
                 var toolFailed = false;
-                foreach (var toolCall in message.ToolCalls)
+                var toolResults = new ConcurrentDictionary<string, (ToolCall Call, string Result)>();
+
+                if (_parallelToolCalls && message.ToolCalls.Count > 1)
                 {
+                    // Parallel execution with cancellation on first error if ContinueOnToolError is false
+                    using var parallelCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var parallelOptions = new ParallelOptions
+                    {
+                        CancellationToken = parallelCts.Token,
+                        MaxDegreeOfParallelism = Math.Min(message.ToolCalls.Count, 3)
+                    };
+
+                    await Parallel.ForEachAsync(message.ToolCalls, parallelOptions, async (toolCall, ct) =>
+                    {
+                        ct.ThrowIfCancellationRequested();
+
+                        Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+
+                        var result = await _mcpToolManager.ExecuteToolCallAsync(toolCall, ct);
+
+                        var isError = result.StartsWith("Error:", StringComparison.Ordinal);
+                        if (isError)
+                        {
+                            Console.WriteLine($"[Tool Error] {result}");
+                            if (!_continueOnToolError)
+                            {
+                                toolFailed = true;
+                                parallelCts.Cancel();
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[Tool Result] {result[..Math.Min(result.Length, 200)]}{(result.Length > 200 ? "..." : "")}");
+                        }
+
+                        toolResults[toolCall.Id] = (toolCall, result);
+                    });
+
+                    // Check cancellation was due to tool error
                     cancellationToken.ThrowIfCancellationRequested();
-
-                    Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                    var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
-
-                    var isError = toolResult.StartsWith("Error:", StringComparison.Ordinal);
-                    if (isError)
+                }
+                else
+                {
+                    // Sequential execution (default path for single tool or when parallel is disabled)
+                    foreach (var toolCall in message.ToolCalls)
                     {
-                        Console.WriteLine($"[Tool Error] {toolResult}");
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+
+                        var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
+
+                        var isError = toolResult.StartsWith("Error:", StringComparison.Ordinal);
+                        if (isError)
+                        {
+                            Console.WriteLine($"[Tool Error] {toolResult}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
+                        }
+
+                        toolResults[toolCall.Id] = (toolCall, toolResult);
+
+                        // If tool failed and ContinueOnToolError is false, stop the batch
+                        if (isError && !_continueOnToolError)
+                        {
+                            toolFailed = true;
+                            break;
+                        }
                     }
-                    else
-                    {
-                        Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
-                    }
+                }
 
-                    // If tool failed and ContinueOnToolError is false, stop the batch
-                    if (isError && !_continueOnToolError)
+                // Add tool results to history in original order
+                lock (_historyLock)
+                {
+                    foreach (var toolCall in message.ToolCalls)
                     {
-                        toolFailed = true;
-                        lock (_historyLock)
+                        if (toolResults.TryGetValue(toolCall.Id, out var pair))
                         {
                             _conversationHistory.Add(new ChatMessage
                             {
                                 Role = "tool",
-                                ToolCallId = toolCall.Id,
-                                Name = toolCall.Function.Name,
-                                Content = toolResult
+                                ToolCallId = pair.Call.Id,
+                                Name = pair.Call.Function.Name,
+                                Content = pair.Result
                             });
                         }
-                        break;
-                    }
-
-                    // Add tool result to conversation
-                    lock (_historyLock)
-                    {
-                        _conversationHistory.Add(new ChatMessage
-                        {
-                            Role = "tool",
-                            ToolCallId = toolCall.Id,
-                            Name = toolCall.Function.Name,
-                            Content = toolResult
-                        });
                     }
                 }
 
@@ -240,7 +299,14 @@ public class DeepSeekAgent : IAsyncDisposable
 
             TrimConversationHistory();
         }
-        var tools = _mcpToolManager.GetToolDefinitions();
+
+        // Optionally summarize old history to preserve context
+        if (_summarizeHistory)
+        {
+            await SummarizeOldHistoryAsync(cancellationToken);
+        }
+
+        var tools = _mcpToolManager.GetToolDefinitions(_toolCacheTtlSeconds);
 
         // First, let's check if the model needs to make tool calls.
         // We use a non-streaming call to decide, then stream the final response.
@@ -261,24 +327,55 @@ public class DeepSeekAgent : IAsyncDisposable
         // Handle tool calls if any
         if (message.ToolCalls is { Count: > 0 })
         {
-            foreach (var toolCall in message.ToolCalls)
+            var toolResults = new ConcurrentDictionary<string, (ToolCall Call, string Result)>();
+
+            if (_parallelToolCalls && message.ToolCalls.Count > 1)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
-                Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}...");
-
-                lock (_historyLock)
+                using var parallelCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var parallelOptions = new ParallelOptions
                 {
-                    _conversationHistory.Add(new ChatMessage
+                    CancellationToken = parallelCts.Token,
+                    MaxDegreeOfParallelism = Math.Min(message.ToolCalls.Count, 3)
+                };
+
+                await Parallel.ForEachAsync(message.ToolCalls, parallelOptions, async (toolCall, ct) =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+                    var result = await _mcpToolManager.ExecuteToolCallAsync(toolCall, ct);
+                    Console.WriteLine($"[Tool Result] {result[..Math.Min(result.Length, 200)]}...");
+                    toolResults[toolCall.Id] = (toolCall, result);
+                });
+
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            else
+            {
+                foreach (var toolCall in message.ToolCalls)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+                    var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
+                    Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}...");
+                    toolResults[toolCall.Id] = (toolCall, toolResult);
+                }
+            }
+
+            // Add tool results to history in original order
+            lock (_historyLock)
+            {
+                foreach (var toolCall in message.ToolCalls)
+                {
+                    if (toolResults.TryGetValue(toolCall.Id, out var pair))
                     {
-                        Role = "tool",
-                        ToolCallId = toolCall.Id,
-                        Name = toolCall.Function.Name,
-                        Content = toolResult
-                    });
+                        _conversationHistory.Add(new ChatMessage
+                        {
+                            Role = "tool",
+                            ToolCallId = pair.Call.Id,
+                            Name = pair.Call.Function.Name,
+                            Content = pair.Result
+                        });
+                    }
                 }
             }
 
@@ -365,14 +462,82 @@ public class DeepSeekAgent : IAsyncDisposable
     private void TrimConversationHistory()
     {
         // NOTE: Este método é SEMPRE chamado dentro de lock(_historyLock)
-        // O lock é reentrante (Monitor), então é seguro ser chamado dentro
-        // de um bloco lock(_historyLock) já existente.
         if (_conversationHistory.Count <= _maxHistoryMessages) return;
 
         // Keep the system prompt, remove oldest messages
         var systemMessage = _conversationHistory[0];
         _conversationHistory.RemoveRange(1, _conversationHistory.Count - _maxHistoryMessages);
         _conversationHistory[0] = systemMessage;
+    }
+
+    /// <summary>
+    /// Summarizes old conversation history via DeepSeek to preserve context without growing token count.
+    /// Only activates when SummarizeHistory is enabled and there are enough messages to summarize.
+    /// </summary>
+    private async Task SummarizeOldHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_summarizeHistory) return;
+
+        List<ChatMessage> messagesToSummarize;
+        lock (_historyLock)
+        {
+            if (_conversationHistory.Count <= _maxHistoryMessages + 5) return;
+
+            // Keep the last _maxHistoryMessages/2 messages intact, summarize the rest
+            var keepCount = Math.Max(_maxHistoryMessages / 2, 10);
+            var summarizeCount = _conversationHistory.Count - keepCount - 1; // -1 for system prompt
+            if (summarizeCount < 5) return;
+
+            messagesToSummarize = _conversationHistory.Skip(1).Take(summarizeCount).ToList();
+        }
+
+        // Build a prompt for summarization
+        var summaryPrompt = new StringBuilder();
+        summaryPrompt.AppendLine("Summarize the following conversation history concisely, preserving key information, decisions, and context needed for future responses:");
+        summaryPrompt.AppendLine();
+
+        foreach (var msg in messagesToSummarize)
+        {
+            var role = msg.Role switch
+            {
+                "user" => "User",
+                "assistant" => "Assistant",
+                "tool" => $"Tool ({msg.Name})",
+                _ => msg.Role
+            };
+            var content = msg.Content?.Length > 500 ? msg.Content[..500] + "..." : msg.Content;
+            summaryPrompt.AppendLine($"{role}: {content}");
+        }
+
+        try
+        {
+            var summarizeMessages = new List<ChatMessage>
+            {
+                new() { Role = "user", Content = summaryPrompt.ToString() }
+            };
+
+            var summaryResponse = await _deepSeek.SendChatAsync(summarizeMessages, cancellationToken: cancellationToken);
+            var summary = summaryResponse.Choices?.FirstOrDefault()?.Message?.Content;
+
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                lock (_historyLock)
+                {
+                    // Remove the summarized messages and insert a system message with the summary
+                    var systemMsg = _conversationHistory[0];
+                    _conversationHistory.RemoveRange(1, messagesToSummarize.Count);
+                    _conversationHistory.Insert(1, new ChatMessage
+                    {
+                        Role = "system",
+                        Content = $"[Conversation Summary]\n{summary}"
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Agent] History summarization failed: {ex.Message}");
+        }
     }
 
     public async ValueTask DisposeAsync()

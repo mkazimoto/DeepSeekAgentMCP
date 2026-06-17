@@ -140,7 +140,12 @@ public static class AgentHostBuilder
             HttpClientTimeoutSeconds = doc.RootElement.TryGetProperty("HttpClient", out var httpClientProp) && httpClientProp.TryGetProperty("TimeoutSeconds", out var timeoutProp)
                 ? timeoutProp.GetInt32()
                 : 300,
-            ContinueOnToolError = !doc.RootElement.TryGetProperty("ContinueOnToolError", out var continueOnErrorProp) || continueOnErrorProp.GetBoolean()
+            ContinueOnToolError = !doc.RootElement.TryGetProperty("ContinueOnToolError", out var continueOnErrorProp) || continueOnErrorProp.GetBoolean(),
+            ParallelToolCalls = !doc.RootElement.TryGetProperty("ParallelToolCalls", out var parallelProp) || parallelProp.GetBoolean(),
+            ToolDefinitionsCacheSeconds = doc.RootElement.TryGetProperty("ToolDefinitionsCacheSeconds", out var cacheProp)
+                ? cacheProp.GetInt32()
+                : 30,
+            SummarizeHistory = doc.RootElement.TryGetProperty("SummarizeHistory", out var summarizeProp) && summarizeProp.GetBoolean()
         };
     }
 

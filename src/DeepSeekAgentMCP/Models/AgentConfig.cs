@@ -62,4 +62,13 @@ public record AgentConfig
 
     /// <summary>Whether to continue processing remaining tool calls when one fails</summary>
     public bool ContinueOnToolError { get; init; } = true;
+
+    /// <summary>Whether to execute independent tool calls in parallel</summary>
+    public bool ParallelToolCalls { get; init; } = true;
+
+    /// <summary>Cache TTL for MCP tool definitions in seconds</summary>
+    public int ToolDefinitionsCacheSeconds { get; init; } = 30;
+
+    /// <summary>Whether to summarize old history instead of discarding it</summary>
+    public bool SummarizeHistory { get; init; } = false;
 }
