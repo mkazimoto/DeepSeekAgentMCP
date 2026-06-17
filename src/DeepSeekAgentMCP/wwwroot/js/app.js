@@ -253,59 +253,6 @@ class ChatApp {
         this.scrollToBottom();
     }
 
-    // --- Add Message ---
-    addMessage(text, type) {
-        const container = this.elements.messagesContainer;
-
-        const div = document.createElement('div');
-        div.className = `message ${type === 'user' ? 'user-message' : type === 'error' ? 'error-message' : ''}`;
-
-        const avatar = document.createElement('div');
-        avatar.className = `message-avatar ${type === 'user' ? 'user-avatar' : 'agent-avatar'}`;
-
-        if (type === 'user') {
-            avatar.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
-                    <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-            `;
-        } else {
-            avatar.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <rect width="18" height="18" rx="4" fill="currentColor" fill-opacity="0.2"/>
-                    <path d="M4.5 9L7.5 12L13.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-            `;
-        }
-
-        div.appendChild(avatar);
-
-        const content = document.createElement('div');
-        content.className = 'message-content';
-
-        const sender = document.createElement('div');
-        sender.className = 'message-sender';
-        sender.textContent = type === 'user' ? 'Você' : type === 'error' ? 'Erro' : 'Assistente gerador de consulta SQL';
-        content.appendChild(sender);
-
-        const textDiv = document.createElement('div');
-        textDiv.className = 'message-text';
-
-        // Format markdown-like content
-        textDiv.innerHTML = this.formatMessage(text);
-
-        content.appendChild(textDiv);
-        div.appendChild(content);
-
-        container.appendChild(div);
-
-        // Render Mermaid diagrams after element is in the DOM
-        this.renderMermaidDiagrams(textDiv);
-
-        this.scrollToBottom();
-    }
-
     // --- Check if text is Mermaid diagram content ---
     isMermaidContent(text) {
         if (!text) return false;
@@ -918,6 +865,99 @@ class ChatApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // --- HTML Sanitization (XSS Protection) ---
+    sanitizeHtml(html) {
+        // Remove event handlers (onclick, onload, onerror, etc.)
+        html = html.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+        // Remove javascript: and data: URIs in links
+        html = html.replace(/(href|src|action|formaction)\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]+)/gi, (match, attr) => {
+            return `${attr}="about:blank"`;
+        });
+        html = html.replace(/(href|src|action|formaction)\s*=\s*(?:"data:[^"]*"|'data:[^']*'|data:[^\s>]+)/gi, (match, attr) => {
+            return `${attr}="about:blank"`;
+        });
+
+        // Remove <script> tags and any content between them
+        html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+        // Remove <iframe>, <embed>, <object> tags
+        html = html.replace(/<(iframe|embed|object|frame|frameset|applet)\b[^>]*>.*?<\/\1\s*>/gis, '');
+        html = html.replace(/<(iframe|embed|object|frame|frameset|applet)\b[^>]*\/?>/gi, '');
+
+        // Remove <style> tags (prevent CSS injection)
+        html = html.replace(/<style\b[^>]*>.*?<\/style\s*>/gis, '');
+
+        // Remove <link> tags (prevent external resource loading)
+        html = html.replace(/<link\b[^>]*\/?>/gi, '');
+
+        // Remove <meta> tags
+        html = html.replace(/<meta\b[^>]*\/?>/gi, '');
+
+        // Remove <base> tags
+        html = html.replace(/<base\b[^>]*\/?>/gi, '');
+
+        return html;
+    }
+
+    // Override addMessage to sanitize agent responses
+    addMessage(text, type) {
+        const container = this.elements.messagesContainer;
+
+        const div = document.createElement('div');
+        div.className = `message ${type === 'user' ? 'user-message' : type === 'error' ? 'error-message' : ''}`;
+
+        const avatar = document.createElement('div');
+        avatar.className = `message-avatar ${type === 'user' ? 'user-avatar' : 'agent-avatar'}`;
+
+        if (type === 'user') {
+            avatar.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            `;
+        } else {
+            avatar.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <rect width="18" height="18" rx="4" fill="currentColor" fill-opacity="0.2"/>
+                    <path d="M4.5 9L7.5 12L13.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
+        }
+
+        div.appendChild(avatar);
+
+        const content = document.createElement('div');
+        content.className = 'message-content';
+
+        const sender = document.createElement('div');
+        sender.className = 'message-sender';
+        sender.textContent = type === 'user' ? 'Você' : type === 'error' ? 'Erro' : 'Assistente gerador de consulta SQL';
+        content.appendChild(sender);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'message-text';
+
+        // Format markdown-like content and sanitize against XSS
+        let formattedHtml = this.formatMessage(text);
+        // Only sanitize agent/error messages (user messages are plain text)
+        if (type !== 'user') {
+            formattedHtml = this.sanitizeHtml(formattedHtml);
+        }
+        textDiv.innerHTML = formattedHtml;
+
+        content.appendChild(textDiv);
+        div.appendChild(content);
+
+        container.appendChild(div);
+
+        // Render Mermaid diagrams after element is in the DOM
+        this.renderMermaidDiagrams(textDiv);
+
+        this.scrollToBottom();
     }
 }
 
