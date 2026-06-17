@@ -75,17 +75,8 @@ function Install-Service {
     }
     Write-Success "Projeto compilado com sucesso."
 
-    # Copy Skills folder to publish
-    $skillsSrc = "$PSScriptRoot\..\src\DeepSeekAgentMCP\Skills"
-    $skillsDst = "$PSScriptRoot\..\publish\Skills"
-    if (Test-Path $skillsSrc) {
-        Write-Info "Copiando pasta Skills para publish..."
-        Copy-Item -Path $skillsSrc -Destination $skillsDst -Recurse -Force
-        Write-Success "Pasta Skills copiada com sucesso."
-    }
-    else {
-        Write-Host "[WARN] Pasta Skills não encontrada em: $skillsSrc" -ForegroundColor Yellow
-    }
+    # Skills já são copiadas pelo dotnet publish via .csproj (Skills\*.md)
+    # Não é necessário Copy-Item manual para evitar duplicação de pastas.
 
     # Copy instructions.md to publish if not exists
     $instructionsSrc = "$PSScriptRoot\..\src\DeepSeekAgentMCP\instructions.md"
