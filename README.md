@@ -43,7 +43,7 @@ export DEEPSEEK_API_KEY="sua-chave-aqui"
 
 Edite o arquivo `config/mcp-servers.json` para adicionar os servidores MCP desejados.
 
-> Servidores MCP são configurados em `config/mcp-servers.json`. Consulte a documentação de cada servidor para配置 específica.
+> Servidores MCP são configurados em `config/mcp-servers.json`. Consulte a documentação de cada servidor para específica.
 
 ### 3. Executar
 
