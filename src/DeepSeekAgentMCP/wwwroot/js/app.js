@@ -679,6 +679,13 @@ class ChatApp {
 
         requestAnimationFrame(() => {
             modal.classList.add('open');
+            // Calculate fit-to-screen zoom so the entire diagram is visible
+            if (svg && this._svgNaturalWidth > 0 && this._svgNaturalHeight > 0) {
+                const availW = Math.max(modalBody.clientWidth - 80, 100);
+                const availH = Math.max(modalBody.clientHeight - 80, 100);
+                const fitZoom = Math.min(availW / this._svgNaturalWidth, availH / this._svgNaturalHeight);
+                this._zoomLevel = Math.min(Math.max(fitZoom, this._zoomMin), 1);
+            }
             this.centerDiagram();
             this.updateZoomLevelDisplay();
             this.setupZoomEvents(modal);
@@ -698,7 +705,7 @@ class ChatApp {
         this.removeMinimap();
     }
 
-    /** Centraliza o diagrama no modal ao abrir */
+    /** Centraliza o diagrama no modal (considerando o zoom atual) */
     centerDiagram() {
         const modalBody = document.getElementById('mermaid-modal-body');
         const container = modalBody.querySelector('.mermaid-diagram-container');
@@ -711,8 +718,9 @@ class ChatApp {
         const svgWidth = this._svgNaturalWidth || 800;
         const svgHeight = this._svgNaturalHeight || 600;
 
-        this._panX = (rect.width - svgWidth) / 2;
-        this._panY = (rect.height - svgHeight) / 2;
+        // Centraliza considerando o zoom: o centro do SVG escalado deve ficar no centro da viewport
+        this._panX = (rect.width - svgWidth * this._zoomLevel) / 2;
+        this._panY = (rect.height - svgHeight * this._zoomLevel) / 2;
         this.applyTransform();
     }
 
