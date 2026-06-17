@@ -1,3 +1,9 @@
+---
+name: CTE Recursivo - Auto-Relacionamento
+version: 1.1
+description: Geração de consultas SQL com CTE recursivo para tabelas com auto-relacionamento (ex: MTAREFA)
+---
+
 # Skill: Consulta com CTE Recursivo (Auto-Relacionamento)
 
 ## Quando usar

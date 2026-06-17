@@ -142,6 +142,8 @@ class ChatApp {
         }
         // Re-initialize Mermaid with correct theme
         this.initMermaid();
+        // Re-render all stored diagrams with the new theme
+        this.reRenderAllDiagrams();
     }
 
     updateThemeIcons(isDark) {
@@ -397,14 +399,27 @@ class ChatApp {
     }
 
     // --- Render Mermaid Diagrams ---
+    /** Armazena source dos diagramas para re-renderização ao trocar tema */
     async renderMermaidDiagrams(container) {
         if (typeof mermaid === 'undefined') return;
         const mermaidElements = container.querySelectorAll('.mermaid:not(.rendered)');
         if (mermaidElements.length === 0) return;
 
+        // Inicializa o mapa de fontes se não existir
+        if (!this._diagramSources) this._diagramSources = new Map();
+
         for (const el of mermaidElements) {
             try {
                 const diagramText = el.textContent || '';
+                // Store source for theme re-render
+                const wrapper = el.closest('.mermaid-wrapper');
+                if (wrapper) {
+                    const diagramId = wrapper.dataset.diagramId;
+                    if (diagramId) {
+                        this._diagramSources.set(diagramId, diagramText);
+                    }
+                }
+
                 // Validate syntax first
                 const valid = await mermaid.parse(diagramText, { suppressErrors: true });
                 if (!valid) {
@@ -420,6 +435,38 @@ class ChatApp {
             } catch (e) {
                 console.warn('Mermaid render error:', e);
                 el.classList.add('rendered', 'mermaid-error');
+            }
+        }
+    }
+
+    /** Re-renderiza todos os diagramas armazenados (usado ao trocar tema) */
+    async reRenderAllDiagrams() {
+        if (!this._diagramSources || this._diagramSources.size === 0) return;
+        if (typeof mermaid === 'undefined') return;
+
+        for (const [diagramId, source] of this._diagramSources) {
+            const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
+            if (!wrapper) continue;
+
+            const mermaidEl = wrapper.querySelector('.mermaid');
+            if (!mermaidEl) continue;
+
+            // Remove rendered state so it gets re-rendered
+            mermaidEl.classList.remove('rendered');
+
+            try {
+                const valid = await mermaid.parse(source, { suppressErrors: true });
+                if (!valid) {
+                    mermaidEl.classList.add('rendered', 'mermaid-error');
+                    continue;
+                }
+                const id = 'mermaid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                const { svg } = await mermaid.render(id, source);
+                mermaidEl.innerHTML = svg;
+                mermaidEl.classList.add('rendered');
+            } catch (e) {
+                console.warn('Mermaid re-render error:', e);
+                mermaidEl.classList.add('rendered', 'mermaid-error');
             }
         }
     }
@@ -577,7 +624,7 @@ class ChatApp {
         }
     }
 
-    // --- Diagram Fullscreen ---
+    // --- Diagram Fullscreen (Pan infinito via transform) ---
     openDiagramFullscreen(diagramId) {
         const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
         if (!wrapper) return;
@@ -588,16 +635,17 @@ class ChatApp {
         const modal = document.getElementById('mermaid-modal');
         const modalBody = document.getElementById('mermaid-modal-body');
 
-        // Reset zoom state
+        // Reset pan/zoom state
         this._zoomLevel = 1;
         this._zoomMax = 5;
         this._zoomMin = 0.1;
+        this._panX = 0;
+        this._panY = 0;
 
         // Clone the rendered SVG or the raw mermaid source
         const svg = mermaidEl.querySelector('svg');
         if (svg) {
             const clone = svg.cloneNode(true);
-            // Ensure the SVG has proper attributes for standalone display
             clone.removeAttribute('width');
             clone.removeAttribute('height');
             clone.setAttribute('viewBox', svg.getAttribute('viewBox') || `0 0 ${svg.getAttribute('width') || 800} ${svg.getAttribute('height') || 600}`);
@@ -606,12 +654,20 @@ class ChatApp {
             clone.style.width = 'auto';
             clone.style.height = 'auto';
 
-            // Create container for zoom/pan
+            // Store SVG dimensions for minimap
+            const vb = clone.getAttribute('viewBox').split(/\s+/);
+            this._svgNaturalWidth = parseInt(vb[2]) || 800;
+            this._svgNaturalHeight = parseInt(vb[3]) || 600;
+
+            // Create container for zoom/pan (transform-based, no scroll)
             const container = document.createElement('div');
             container.className = 'mermaid-diagram-container';
             container.appendChild(clone);
             modalBody.innerHTML = '';
             modalBody.appendChild(container);
+
+            // Criar minimap
+            this.createMinimap(modalBody, clone, this._svgNaturalWidth, this._svgNaturalHeight);
         } else {
             // Fallback: show raw mermaid source
             modalBody.innerHTML = `<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;color:var(--text-primary);background:var(--bg-secondary);padding:16px;border-radius:8px;max-width:100%;overflow:auto;">${this.escapeHtml(mermaidEl.textContent || '')}</pre>`;
@@ -621,9 +677,9 @@ class ChatApp {
         document.body.style.overflow = 'hidden';
         this._fullscreenDiagramId = diagramId;
 
-        // Re-flow to trigger animation
         requestAnimationFrame(() => {
             modal.classList.add('open');
+            this.centerDiagram();
             this.updateZoomLevelDisplay();
             this.setupZoomEvents(modal);
         });
@@ -636,10 +692,31 @@ class ChatApp {
         document.body.style.overflow = '';
         this._fullscreenDiagramId = null;
         this._zoomLevel = 1;
+        this._panX = 0;
+        this._panY = 0;
         this.cleanupZoomEvents(modal);
+        this.removeMinimap();
     }
 
-    // --- Zoom Controls ---
+    /** Centraliza o diagrama no modal ao abrir */
+    centerDiagram() {
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const container = modalBody.querySelector('.mermaid-diagram-container');
+        if (!container) return;
+
+        const svg = container.querySelector('svg');
+        if (!svg) return;
+
+        const rect = modalBody.getBoundingClientRect();
+        const svgWidth = this._svgNaturalWidth || 800;
+        const svgHeight = this._svgNaturalHeight || 600;
+
+        this._panX = (rect.width - svgWidth) / 2;
+        this._panY = (rect.height - svgHeight) / 2;
+        this.applyTransform();
+    }
+
+    // --- Zoom + Pan Controls (transform-based, pan infinito) ---
     setupZoomEvents(modal) {
         const modalBody = document.getElementById('mermaid-modal-body');
         const zoomIn = document.getElementById('zoom-in');
@@ -652,10 +729,14 @@ class ChatApp {
         this._zoomInHandler = () => this.zoomDiagram(0.25);
         this._zoomOutHandler = () => this.zoomDiagram(-0.25);
         this._zoomResetHandler = () => this.resetZoom();
-        this._wheelHandler = (e) => this.handleZoomWheel(e);
-        this._dragStartHandler = (e) => this.handleDragStart(e);
-        this._dragMoveHandler = (e) => this.handleDragMove(e);
-        this._dragEndHandler = () => this.handleDragEnd();
+        this._wheelHandler = (e) => this.handleDiagramWheel(e);
+        this._dragStartHandler = (e) => this.handleDiagramDragStart(e);
+        this._dragMoveHandler = (e) => this.handleDiagramDragMove(e);
+        this._dragEndHandler = () => this.handleDiagramDragEnd();
+
+        // Minimap events
+        this._minimapClickHandler = (e) => this.handleMinimapClick(e);
+        this._minimapDragHandler = (e) => this.handleMinimapDrag(e);
 
         zoomIn.addEventListener('click', this._zoomInHandler);
         zoomOut.addEventListener('click', this._zoomOutHandler);
@@ -664,6 +745,11 @@ class ChatApp {
         modalBody.addEventListener('mousedown', this._dragStartHandler);
         document.addEventListener('mousemove', this._dragMoveHandler);
         document.addEventListener('mouseup', this._dragEndHandler);
+
+        const minimap = modalBody.querySelector('.minimap');
+        if (minimap) {
+            minimap.addEventListener('mousedown', this._minimapClickHandler);
+        }
     }
 
     cleanupZoomEvents(modal) {
@@ -680,6 +766,11 @@ class ChatApp {
         if (this._dragMoveHandler) document.removeEventListener('mousemove', this._dragMoveHandler);
         if (this._dragEndHandler) document.removeEventListener('mouseup', this._dragEndHandler);
 
+        const minimap = modalBody.querySelector('.minimap');
+        if (minimap && this._minimapClickHandler) {
+            minimap.removeEventListener('mousedown', this._minimapClickHandler);
+        }
+
         this._zoomInHandler = null;
         this._zoomOutHandler = null;
         this._zoomResetHandler = null;
@@ -687,6 +778,8 @@ class ChatApp {
         this._dragStartHandler = null;
         this._dragMoveHandler = null;
         this._dragEndHandler = null;
+        this._minimapClickHandler = null;
+        this._minimapDragHandler = null;
         this._isDragging = false;
     }
 
@@ -694,17 +787,19 @@ class ChatApp {
         const newZoom = Math.max(this._zoomMin, Math.min(this._zoomMax, this._zoomLevel + delta));
         if (newZoom === this._zoomLevel) return;
         this._zoomLevel = newZoom;
-        this.applyZoom();
+        this.applyTransform();
     }
 
-    applyZoom() {
+    /** Aplica transform: translate(X, Y) scale(Z) — pan infinito sem scroll */
+    applyTransform() {
         const modalBody = document.getElementById('mermaid-modal-body');
         const container = modalBody.querySelector('.mermaid-diagram-container');
         if (!container) return;
 
         const pct = Math.round(this._zoomLevel * 100);
-        container.style.transform = `scale(${this._zoomLevel})`;
+        container.style.transform = `translate(${this._panX}px, ${this._panY}px) scale(${this._zoomLevel})`;
         this.updateZoomLevelDisplay();
+        this.updateMinimapViewport();
 
         // Show zoom indicator briefly
         const existing = modalBody.querySelector('.zoom-info');
@@ -723,11 +818,7 @@ class ChatApp {
 
     resetZoom() {
         this._zoomLevel = 1;
-        this.applyZoom();
-        // Also reset scroll position
-        const modalBody = document.getElementById('mermaid-modal-body');
-        modalBody.scrollLeft = 0;
-        modalBody.scrollTop = 0;
+        this.centerDiagram();
     }
 
     updateZoomLevelDisplay() {
@@ -737,53 +828,235 @@ class ChatApp {
         }
     }
 
-    handleZoomWheel(e) {
+    /** Wheel = zoom (com Ctrl) ou pan vertical (sem Ctrl) */
+    handleDiagramWheel(e) {
         const modalBody = document.getElementById('mermaid-modal-body');
         const container = modalBody.querySelector('.mermaid-diagram-container');
         if (!container) return;
 
-        // Zoom with Ctrl+Scroll
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             const delta = e.deltaY > 0 ? -0.1 : 0.1;
             this.zoomDiagram(delta);
+        } else {
+            // Pan vertical com scroll suave
+            this._panY -= e.deltaY;
+            this.applyTransform();
         }
     }
 
-    handleDragStart(e) {
+    handleDiagramDragStart(e) {
         const modalBody = document.getElementById('mermaid-modal-body');
         const container = modalBody.querySelector('.mermaid-diagram-container');
         if (!container) return;
 
-        // Only drag with left mouse button, and only when zoomed
         if (e.button !== 0) return;
 
         this._isDragging = true;
         this._dragStartX = e.clientX;
         this._dragStartY = e.clientY;
-        this._scrollStartX = modalBody.scrollLeft;
-        this._scrollStartY = modalBody.scrollTop;
+        this._panStartX = this._panX;
+        this._panStartY = this._panY;
         modalBody.classList.add('dragging');
     }
 
-    handleDragMove(e) {
+    handleDiagramDragMove(e) {
         if (!this._isDragging) return;
 
-        const modalBody = document.getElementById('mermaid-modal-body');
         const dx = e.clientX - this._dragStartX;
         const dy = e.clientY - this._dragStartY;
-        modalBody.scrollLeft = this._scrollStartX - dx;
-        modalBody.scrollTop = this._scrollStartY - dy;
+        this._panX = this._panStartX + dx;
+        this._panY = this._panStartY + dy;
+        this.applyTransform();
     }
 
-    handleDragEnd() {
+    handleDiagramDragEnd() {
         if (!this._isDragging) return;
         this._isDragging = false;
         const modalBody = document.getElementById('mermaid-modal-body');
         modalBody.classList.remove('dragging');
     }
 
-    // --- Diagram Export ---
+    // --- Minimap ---
+    createMinimap(modalBody, svgElement, naturalWidth, naturalHeight) {
+        this.removeMinimap();
+
+        this._minimapSvgUrl = null;
+        this._minimapImg = null;
+
+        const minimap = document.createElement('canvas');
+        minimap.className = 'minimap';
+        minimap.width = 160;
+        minimap.height = 120;
+        this._minimapEl = minimap;
+
+        const ctx = minimap.getContext('2d');
+        if (!ctx) return;
+
+        // Serializa SVG e cria Image para desenhar no canvas
+        const svgString = new XMLSerializer().serializeToString(svgElement);
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        this._minimapSvgUrl = URL.createObjectURL(blob);
+
+        const img = new Image();
+        this._minimapImg = img;
+
+        img.onload = () => {
+            const scale = Math.min(minimap.width / naturalWidth, minimap.height / naturalHeight);
+            const drawW = naturalWidth * scale;
+            const drawH = naturalHeight * scale;
+            const offsetX = (minimap.width - drawW) / 2;
+            const offsetY = (minimap.height - drawH) / 2;
+
+            this._minimapParams = { scale, offsetX, offsetY, drawW, drawH };
+
+            // Desenho inicial com viewport
+            this.redrawMinimap();
+        };
+
+        img.src = this._minimapSvgUrl;
+        modalBody.appendChild(minimap);
+    }
+
+    removeMinimap() {
+        if (this._minimapSvgUrl) {
+            URL.revokeObjectURL(this._minimapSvgUrl);
+            this._minimapSvgUrl = null;
+        }
+        if (this._minimapEl) {
+            this._minimapEl.remove();
+            this._minimapEl = null;
+        }
+        this._minimapParams = null;
+        this._minimapImg = null;
+    }
+
+    /** Redesenha o canvas do minimap por completo (fundo + viewport) */
+    redrawMinimap() {
+        if (!this._minimapEl || !this._minimapParams || !this._minimapImg) return;
+        const canvas = this._minimapEl;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { offsetX, offsetY, drawW, drawH } = this._minimapParams;
+
+        // Limpa e redesenha o SVG
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(this._minimapImg, offsetX, offsetY, drawW, drawH);
+
+        // Desenha o viewport
+        this.drawMinimapViewport(ctx);
+    }
+
+    /** Desenha o retângulo do viewport sobre o minimap */
+    drawMinimapViewport(ctx) {
+        if (!this._minimapParams) return;
+        const canvas = this._minimapEl;
+        const { offsetX, offsetY, drawW, drawH } = this._minimapParams;
+        const modalBody = document.getElementById('mermaid-modal-body');
+
+        const viewW = modalBody.clientWidth;
+        const viewH = modalBody.clientHeight;
+        const z = this._zoomLevel;
+
+        // Coordenadas do viewport no SVG natural
+        const vpLeft = -this._panX / z;
+        const vpTop = -this._panY / z;
+        const vpRight = vpLeft + viewW / z;
+        const vpBottom = vpTop + viewH / z;
+
+        // Mapeia para coordenadas do minimap
+        const ratioX = drawW / this._svgNaturalWidth;
+        const ratioY = drawH / this._svgNaturalHeight;
+        const mX = offsetX + vpLeft * ratioX;
+        const mY = offsetY + vpTop * ratioY;
+        const mW = (vpRight - vpLeft) * ratioX;
+        const mH = (vpBottom - vpTop) * ratioY;
+
+        // Sombra fora do viewport
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, 0, canvas.width, mY);
+        ctx.fillRect(0, mY + mH, canvas.width, canvas.height - mY - mH);
+        ctx.fillRect(0, mY, mX, mH);
+        ctx.fillRect(mX + mW, mY, canvas.width - mX - mW, mH);
+
+        // Borda do viewport
+        ctx.strokeStyle = '#818cf8';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mX, mY, mW, mH);
+    }
+
+    updateMinimapViewport() {
+        if (!this._minimapEl || !this._minimapParams) return;
+        const ctx = this._minimapEl.getContext('2d');
+        if (!ctx) return;
+        this.redrawMinimap();
+    }
+
+    handleMinimapClick(e) {
+        if (!this._minimapEl || !this._minimapParams) return;
+
+        const rect = this._minimapEl.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const { offsetX, offsetY, drawW, drawH } = this._minimapParams;
+
+        // Converte clique no minimap para coordenada SVG natural
+        const svgX = (x - offsetX) / (drawW / this._svgNaturalWidth);
+        const svgY = (y - offsetY) / (drawH / this._svgNaturalHeight);
+
+        // Centraliza o viewport nessa posição
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const viewW = modalBody.clientWidth;
+        const viewH = modalBody.clientHeight;
+        const z = this._zoomLevel;
+
+        this._panX = -(svgX * z - viewW / 2);
+        this._panY = -(svgY * z - viewH / 2);
+
+        this.applyTransform();
+
+        // Inicia drag no minimap para follow do mouse
+        this._minimapDragging = true;
+        this._minimapDragStartX = e.clientX;
+        this._minimapDragStartY = e.clientY;
+
+        const onMove = (ev) => this.handleMinimapDrag(ev);
+        const onUp = () => {
+            this._minimapDragging = false;
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }
+
+    handleMinimapDrag(e) {
+        if (!this._minimapDragging || !this._minimapEl || !this._minimapParams) return;
+
+        const rect = this._minimapEl.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+        const { offsetX, offsetY, drawW, drawH } = this._minimapParams;
+
+        const svgX = (x - offsetX) / (drawW / this._svgNaturalWidth);
+        const svgY = (y - offsetY) / (drawH / this._svgNaturalHeight);
+
+        const modalBody = document.getElementById('mermaid-modal-body');
+        const viewW = modalBody.clientWidth;
+        const viewH = modalBody.clientHeight;
+        const z = this._zoomLevel;
+
+        this._panX = -(svgX * z - viewW / 2);
+        this._panY = -(svgY * z - viewH / 2);
+
+        this.applyTransform();
+    }
+
+    // --- Diagram Export (SVG + PNG) ---
     exportDiagramAsSvg(diagramId) {
         const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
         if (!wrapper) return;
@@ -797,39 +1070,80 @@ class ChatApp {
             return;
         }
 
-        this.downloadSvg(svg, `diagrama-${diagramId}.svg`);
+        this.showExportMenu(diagramId, svg);
     }
 
     exportFullscreenDiagram() {
         const modalBody = document.getElementById('mermaid-modal-body');
         const svg = modalBody.querySelector('svg');
         if (!svg) {
-            this.showToast('❸ Nenhum diagrama para exportar');
+            this.showToast('❌ Nenhum diagrama para exportar');
             return;
         }
-        this.downloadSvg(svg, `diagrama-${this._fullscreenDiagramId || 'exportado'}.svg`);
+        this.showExportMenu(this._fullscreenDiagramId || 'exportado', svg);
+    }
+
+    showExportMenu(diagramId, svgElement) {
+        // Cria menu flutuante de opções de exportação
+        let menu = document.querySelector('.export-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.className = 'export-menu';
+            menu.innerHTML = `
+                <div class="export-menu-item" data-export-format="svg">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Exportar como SVG
+                </div>
+                <div class="export-menu-item" data-export-format="png">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    Exportar como PNG
+                </div>
+            `;
+            menu.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-export-format]');
+                if (!item) return;
+                const format = item.dataset.exportFormat;
+                if (format === 'svg') {
+                    this.downloadSvg(svgElement, `diagrama-${diagramId}.svg`);
+                } else if (format === 'png') {
+                    this.downloadPng(svgElement, `diagrama-${diagramId}.png`);
+                }
+                menu.remove();
+            });
+            document.body.appendChild(menu);
+
+            // Fecha ao clicar fora
+            setTimeout(() => {
+                document.addEventListener('click', (e) => {
+                    if (!menu.contains(e.target)) menu.remove();
+                }, { once: true });
+            }, 0);
+        }
+
+        // Posiciona o menu próximo ao botão
+        const btn = document.querySelector('[data-export-diagram], #mermaid-modal-export');
+        if (btn) {
+            const rect = btn.getBoundingClientRect();
+            menu.style.position = 'fixed';
+            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+        }
     }
 
     downloadSvg(svgElement, filename) {
-        // Clone the SVG to avoid modifying the original
         const clone = svgElement.cloneNode(true);
-
-        // Ensure inline CSS from style tags is included
         const styles = svgElement.querySelectorAll('style');
-        styles.forEach(s => {
-            clone.appendChild(s.cloneNode(true));
-        });
+        styles.forEach(s => clone.appendChild(s.cloneNode(true)));
 
-        // Add black background rectangle as the first child of the SVG
         const viewBox = clone.getAttribute('viewBox') || '';
         let width = clone.getAttribute('width') || '800';
         let height = clone.getAttribute('height') || '600';
-        // Use viewBox dimensions if available
         const vbParts = viewBox.split(/\s+/);
         if (vbParts.length === 4) {
             width = vbParts[2];
             height = vbParts[3];
         }
+
         const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         bgRect.setAttribute('width', width);
         bgRect.setAttribute('height', height);
@@ -838,11 +1152,9 @@ class ChatApp {
         bgRect.setAttribute('y', '0');
         clone.insertBefore(bgRect, clone.firstChild);
 
-        // Serialize to string
         const serializer = new XMLSerializer();
         const svgString = serializer.serializeToString(clone);
 
-        // Create proper SVG document with XML declaration
         const svgBlob = new Blob([
             '<?xml version="1.0" encoding="UTF-8"?>\n' +
             '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n' +
@@ -859,6 +1171,71 @@ class ChatApp {
         URL.revokeObjectURL(url);
 
         this.showToast('✅ Diagrama exportado como SVG');
+    }
+
+    downloadPng(svgElement, filename) {
+        const clone = svgElement.cloneNode(true);
+
+        // Adiciona fundo preto
+        const viewBox = clone.getAttribute('viewBox') || '';
+        let width = clone.getAttribute('width') || '800';
+        let height = clone.getAttribute('height') || '600';
+        const vbParts = viewBox.split(/\s+/);
+        if (vbParts.length === 4) {
+            width = parseInt(vbParts[2]);
+            height = parseInt(vbParts[3]);
+        }
+
+        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bgRect.setAttribute('width', width);
+        bgRect.setAttribute('height', height);
+        bgRect.setAttribute('fill', '#000000');
+        bgRect.setAttribute('x', '0');
+        bgRect.setAttribute('y', '0');
+        clone.insertBefore(bgRect, clone.firstChild);
+
+        const styles = svgElement.querySelectorAll('style');
+        styles.forEach(s => clone.appendChild(s.cloneNode(true)));
+
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(clone);
+
+        // Cria blob SVG e converte para PNG via canvas
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+
+        const scale = 2; // alta resolução (2x)
+        const canvas = document.createElement('canvas');
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const ctx = canvas.getContext('2d');
+
+        const img = new Image();
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+
+            canvas.toBlob((pngBlob) => {
+                if (!pngBlob) {
+                    this.showToast('❌ Erro ao gerar PNG');
+                    return;
+                }
+                const pngUrl = URL.createObjectURL(pngBlob);
+                const link = document.createElement('a');
+                link.href = pngUrl;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(pngUrl);
+                this.showToast('✅ Diagrama exportado como PNG');
+            }, 'image/png');
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            this.showToast('❌ Erro ao gerar PNG');
+        };
+        img.src = url;
     }
 
     escapeHtml(text) {

@@ -1,3 +1,9 @@
+---
+name: Diagrama ER de Tabelas
+version: 1.1
+description: Geração automática de diagramas Mermaid ER Diagram para tabelas SQL, incluindo quando consultas usam JOIN
+---
+
 # Skill: Diagrama de Relacionamento de Tabelas (Mermaid ER Diagram)
 
 ## Quando usar

@@ -1,3 +1,9 @@
+---
+name: CTE Recursivo - Auto-Relacionamento N:N
+version: 1.0
+description: Geração de consultas SQL com CTE recursivo para tabelas N:N com auto-relacionamento (ex: MRECCMP → MCMP)
+---
+
 # Skill: Consulta com CTE Recursivo (Auto-Relacionamento) com uma tabela n para n que referencia a mesma tabela
 
 ## Quando usar
