@@ -38,7 +38,7 @@ public class DeepSeekClient : IDisposable
     }
 
     /// <summary>
-    /// Sends a chat completion request to DeepSeek (non-streaming).
+    /// Sends a chat completion request to DeepSeek (non-streaming) with retry on transient failures.
     /// </summary>
     public async Task<DeepSeekChatResponse> SendChatAsync(
         List<ChatMessage> messages,
@@ -62,12 +62,44 @@ public class DeepSeekClient : IDisposable
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync("/chat/completions", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var maxRetries = 3;
+        var baseDelayMs = 1000;
 
-        var result = await response.Content.ReadFromJsonAsync<DeepSeekChatResponse>(cancellationToken: cancellationToken);
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
-        return result ?? throw new InvalidOperationException("Failed to deserialize DeepSeek response.");
+            try
+            {
+                var response = await _httpClient.PostAsync("/chat/completions", content, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<DeepSeekChatResponse>(cancellationToken: cancellationToken);
+                    return result ?? throw new InvalidOperationException("Failed to deserialize DeepSeek response.");
+                }
+
+                // Retry on 429 (rate limit) and 5xx (server errors)
+                if (attempt < maxRetries && ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500))
+                {
+                    var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
+                    Console.WriteLine($"[DeepSeek] Retry {attempt}/{maxRetries} after {(int)response.StatusCode} - waiting {delay.TotalMilliseconds}ms");
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+
+                // Non-retryable error
+                response.EnsureSuccessStatusCode();
+            }
+            catch (HttpRequestException ex) when (attempt < maxRetries)
+            {
+                var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
+                Console.WriteLine($"[DeepSeek] Retry {attempt}/{maxRetries} after HttpRequestException: {ex.Message}");
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+
+        throw new HttpRequestException($"Failed to get response from DeepSeek after {maxRetries} retries.");
     }
 
     /// <summary>

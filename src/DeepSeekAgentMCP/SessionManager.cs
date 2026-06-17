@@ -1,13 +1,11 @@
 using System.Collections.Concurrent;
-using System.Text;
-using System.Text.Json;
 using DeepSeekAgentMCP.Models;
 
 namespace DeepSeekAgentMCP;
 
 /// <summary>
-/// Gerencia múltiplas sessões de conversa, cada uma com seu próprio histórico.
-/// Resolve o problema de sessões compartilharem o mesmo contexto.
+/// Gerencia múltiplas sessões de conversa, cada uma com seu próprio agente.
+/// Cada sessão possui um DeepSeekAgent isolado com seu próprio histórico.
 /// </summary>
 public class SessionManager : IDisposable
 {
@@ -15,24 +13,13 @@ public class SessionManager : IDisposable
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeRequests = new(StringComparer.Ordinal);
     private readonly DeepSeekClient _deepSeekClient;
     private readonly McpToolManager _mcpToolManager;
-    private readonly int _maxHistoryMessages;
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(30);
 
-    private static readonly string SystemPrompt = BuildSystemPrompt();
-
-    private static string BuildSystemPrompt()
-    {
-        var basePrompt = SkillLoader.LoadInstructions();
-        var skillsContent = SkillLoader.LoadSkillsToPrompt();
-        return basePrompt + skillsContent;
-    }
-
-    public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager, int maxHistoryMessages = 50)
+    public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager)
     {
         _deepSeekClient = deepSeekClient;
         _mcpToolManager = mcpToolManager;
-        _maxHistoryMessages = maxHistoryMessages;
 
         // Cleanup stale sessions every 15 minutes
         _cleanupTimer = new Timer(_ => CleanupStaleSessions(), null, TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(15));
@@ -47,100 +34,52 @@ public class SessionManager : IDisposable
 
         // Create a CancellationTokenSource linked to the caller's token
         var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var linkedToken = cts.Token;
-
-        // Store the CTS so it can be cancelled via CancelRequest
         _activeRequests[sessionId] = cts;
 
         try
         {
-            // Add user message to session history
-            state.History.Add(new ChatMessage
-            {
-                Role = "user",
-                Content = userMessage
-            });
-
             state.LastAccess = DateTime.UtcNow;
-            TrimConversationHistory(state);
-
-            var tools = _mcpToolManager.GetToolDefinitions();
-
-            var maxIterations = 10;
-            var currentIteration = 0;
-
-            while (currentIteration < maxIterations)
-            {
-                currentIteration++;
-
-                DeepSeekChatResponse response;
-                try
-                {
-                    response = await _deepSeekClient.SendChatAsync(
-                        state.History,
-                        tools: tools.Count > 0 ? tools : null,
-                        toolChoice: null,
-                        cancellationToken: linkedToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    var cancelMsg = "O pedido foi cancelado pelo usuário.";
-                    state.History.Add(new ChatMessage { Role = "assistant", Content = cancelMsg });
-                    return cancelMsg;
-                }
-                catch (HttpRequestException ex)
-                {
-                    var error = $"Error communicating with DeepSeek API: {ex.Message}";
-                    state.History.Add(new ChatMessage { Role = "assistant", Content = error });
-                    return error;
-                }
-
-                var choice = response.Choices.FirstOrDefault();
-                if (choice == null)
-                {
-                    var error = "No response from DeepSeek.";
-                    state.History.Add(new ChatMessage { Role = "assistant", Content = error });
-                    return error;
-                }
-
-                var message = choice.Message;
-                state.History.Add(message);
-
-                // Check if the model wants to call tools
-                if (message.ToolCalls is { Count: > 0 })
-                {
-                    foreach (var toolCall in message.ToolCalls)
-                    {
-                        linkedToken.ThrowIfCancellationRequested();
-
-                        Console.WriteLine($"[Session:{sessionId}] [Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                        var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, linkedToken);
-
-                        Console.WriteLine($"[Session:{sessionId}] [Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
-
-                        state.History.Add(new ChatMessage
-                        {
-                            Role = "tool",
-                            ToolCallId = toolCall.Id,
-                            Name = toolCall.Function.Name,
-                            Content = toolResult
-                        });
-                    }
-
-                    TrimConversationHistory(state);
-                    continue;
-                }
-
-                // No tool calls - this is the final response
-                return message.Content;
-            }
-
-            return "The agent reached the maximum number of iterations. Please try a simpler request.";
+            return await state.Agent.ProcessMessageAsync(userMessage, cts.Token);
         }
         finally
         {
-            // Clean up the CTS
+            _activeRequests.TryRemove(sessionId, out _);
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Processes a user message with streaming output via callback.
+    /// </summary>
+    public async Task<string> ProcessMessageStreamingAsync(
+        string sessionId, string userMessage,
+        Action<string>? onChunk = null,
+        CancellationToken cancellationToken = default)
+    {
+        var state = GetOrCreateSession(sessionId);
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _activeRequests[sessionId] = cts;
+
+        try
+        {
+            state.LastAccess = DateTime.UtcNow;
+
+            // Subscribe to streaming output
+            void Handler(string chunk) => onChunk?.Invoke(chunk);
+            state.Agent.OnStreamingOutput += Handler;
+
+            try
+            {
+                return await state.Agent.ProcessMessageStreamingAsync(userMessage, cts.Token);
+            }
+            finally
+            {
+                state.Agent.OnStreamingOutput -= Handler;
+            }
+        }
+        finally
+        {
             _activeRequests.TryRemove(sessionId, out _);
             cts.Dispose();
         }
@@ -166,12 +105,7 @@ public class SessionManager : IDisposable
     {
         if (_sessions.TryGetValue(sessionId, out var state))
         {
-            state.History.Clear();
-            state.History.Add(new ChatMessage
-            {
-                Role = "system",
-                Content = SystemPrompt
-            });
+            state.Agent.ClearConversation();
             state.LastAccess = DateTime.UtcNow;
         }
     }
@@ -183,7 +117,7 @@ public class SessionManager : IDisposable
     {
         if (_sessions.TryGetValue(sessionId, out var state))
         {
-            return state.History.Skip(1).ToList().AsReadOnly();
+            return state.Agent.GetConversationHistory();
         }
         return [];
     }
@@ -193,7 +127,12 @@ public class SessionManager : IDisposable
     /// </summary>
     public bool RemoveSession(string sessionId)
     {
-        return _sessions.TryRemove(sessionId, out _);
+        if (_sessions.TryRemove(sessionId, out var state))
+        {
+            Console.WriteLine($"[Session] Removed session: {sessionId}");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -208,23 +147,11 @@ public class SessionManager : IDisposable
             Console.WriteLine($"[Session] Created new session: {id}");
             return new SessionState
             {
-                History = new List<ChatMessage>
-                {
-                    new() { Role = "system", Content = SystemPrompt }
-                },
+                Agent = new DeepSeekAgent(_deepSeekClient, _mcpToolManager),
                 CreatedAt = DateTime.UtcNow,
                 LastAccess = DateTime.UtcNow
             };
         });
-    }
-
-    private void TrimConversationHistory(SessionState state)
-    {
-        if (state.History.Count <= _maxHistoryMessages) return;
-
-        var systemMessage = state.History[0];
-        state.History.RemoveRange(1, state.History.Count - _maxHistoryMessages);
-        state.History[0] = systemMessage;
     }
 
     private void CleanupStaleSessions()
@@ -257,7 +184,7 @@ public class SessionManager : IDisposable
 
     private class SessionState
     {
-        public List<ChatMessage> History { get; set; } = [];
+        public DeepSeekAgent Agent { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
         public DateTime LastAccess { get; set; }
     }

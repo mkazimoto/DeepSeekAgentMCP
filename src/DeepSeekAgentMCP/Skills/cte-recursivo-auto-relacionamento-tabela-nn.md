@@ -28,7 +28,8 @@ WITH CTE_RECURSIVO AS (
         R.VALORTOTAL,
         R.ATIVO,
         0 AS NIVEL          
-    FROM MTAREFA T (NOLOCK)
+    FROM 
+         MTAREFA T (NOLOCK)
          INNER JOIN MRECCMP R (NOLOCK) 
            ON R.CODCOLIGADA = T.CODCOLIGADA 
           AND R.IDPRJ = T.IDPRJREC 
@@ -58,7 +59,8 @@ WITH CTE_RECURSIVO AS (
         F.VALORTOTAL,
         F.ATIVO,
         P.NIVEL + 1
-    FROM MRECCMP F (NOLOCK)       
+    FROM 
+         MRECCMP F (NOLOCK)       
          INNER JOIN CTE_RECURSIVO P
             ON  P.CODCOLIGADA = F.CODCOLIGADA
             AND P.IDPRJ       = F.IDPRJ
@@ -82,7 +84,8 @@ SELECT
     H.VALORUNIT,
     H.VALORTOTAL,
     H.NIVEL
-FROM CTE_RECURSIVO H 
+FROM 
+     CTE_RECURSIVO H 
      LEFT JOIN MCMP C (NOLOCK)
        ON C.CODCOLIGADA = H.CODCOLIGADA
       AND C.IDPRJ = H.IDPRJREC
@@ -98,11 +101,12 @@ OPTION (MAXRECURSION 20)
 ```
 ## Regras importantes
 
-1. **`c.NIVEL < 20`** é necessário para evitar recursão infinita
-2. **`OPTION (MAXRECURSION 20)`** é necessário para evitar recursão infinita
-3. **Sempre use `UNION ALL`** entre âncora e parte recursiva
-4. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
-5. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
-6. **`(NOLOCK)`** recomendado para consultas de leitura em produção
-7. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
+1. **Evitar OUTER JOIN no CTE RECURSIVO** utilize apenas LEFT, RIGHT, FULL OUTER JOIN no SELECT principal
+2. **`c.NIVEL < 20`** é necessário para evitar recursão infinita
+3. **`OPTION (MAXRECURSION 20)`** é necessário para evitar recursão infinita
+4. **Sempre use `UNION ALL`** entre âncora e parte recursiva
+5. **Coluna `NIVEL`** obrigatória para rastrear profundidade (incrementar com `+ 1`)
+6. **Chaves compostas**: quando a PK for composta, inclua TODAS as colunas no JOIN recursivo
+7. **`(NOLOCK)`** recomendado para consultas de leitura em produção
+8. **ORDER BY** por código hierárquico para preservar a estrutura de árvore
 

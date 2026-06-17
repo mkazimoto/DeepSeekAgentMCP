@@ -80,6 +80,7 @@ public class DeepSeekAgent : IAsyncDisposable
 
         while (currentIteration < maxIterations)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             currentIteration++;
 
             // Send to DeepSeek
@@ -91,6 +92,12 @@ public class DeepSeekAgent : IAsyncDisposable
                     tools: tools.Count > 0 ? tools : null,
                     toolChoice: null,
                     cancellationToken: cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                var cancelMsg = "O pedido foi cancelado pelo usuário.";
+                _conversationHistory.Add(new ChatMessage { Role = "assistant", Content = cancelMsg });
+                return cancelMsg;
             }
             catch (HttpRequestException ex)
             {
@@ -117,6 +124,8 @@ public class DeepSeekAgent : IAsyncDisposable
             {
                 foreach (var toolCall in message.ToolCalls)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
 
                     var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
@@ -151,6 +160,8 @@ public class DeepSeekAgent : IAsyncDisposable
     /// </summary>
     public async Task<string> ProcessMessageStreamingAsync(string userMessage, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         _conversationHistory.Add(new ChatMessage
         {
             Role = "user",
@@ -178,6 +189,8 @@ public class DeepSeekAgent : IAsyncDisposable
         {
             foreach (var toolCall in message.ToolCalls)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
 
                 var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
@@ -198,6 +211,7 @@ public class DeepSeekAgent : IAsyncDisposable
             var fullContent = new StringBuilder();
             await foreach (var chunk in _deepSeek.SendChatStreamingAsync(_conversationHistory, cancellationToken: cancellationToken))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 fullContent.Append(chunk);
                 OnStreamingOutput?.Invoke(chunk);
             }
@@ -214,6 +228,7 @@ public class DeepSeekAgent : IAsyncDisposable
             await foreach (var chunk in _deepSeek.SendChatStreamingAsync(
                 _conversationHistory, cancellationToken: cancellationToken))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 fullContent.Append(chunk);
                 OnStreamingOutput?.Invoke(chunk);
             }

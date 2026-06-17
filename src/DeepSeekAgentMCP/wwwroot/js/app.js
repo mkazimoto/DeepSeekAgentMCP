@@ -244,13 +244,6 @@ class ChatApp {
                 this.addMessage(data.response, 'agent');
             }
 
-            // Add tool calls if present
-            if (data.toolCalls && data.toolCalls.length > 0) {
-                data.toolCalls.forEach(tc => {
-                    this.addToolCall(tc);
-                });
-            }
-
         } catch (err) {
             if (!this.isLoading) return;
             this.setLoading(false);
@@ -310,37 +303,6 @@ class ChatApp {
         // Render Mermaid diagrams after element is in the DOM
         this.renderMermaidDiagrams(textDiv);
 
-        this.scrollToBottom();
-    }
-
-    // --- Add Tool Call ---
-    addToolCall(toolCall) {
-        const container = this.elements.messagesContainer;
-
-        const div = document.createElement('div');
-        div.className = 'message tool-message';
-
-        const content = document.createElement('div');
-        content.className = 'message-content';
-
-        const sender = document.createElement('div');
-        sender.className = 'message-sender';
-        sender.innerHTML = `🔧 ${this.escapeHtml(toolCall.name)}`;
-        content.appendChild(sender);
-
-        const textDiv = document.createElement('div');
-        textDiv.className = 'message-text';
-        try {
-            const args = JSON.parse(toolCall.arguments);
-            textDiv.textContent = `Argumentos: ${JSON.stringify(args, null, 2)}`;
-        } catch {
-            textDiv.textContent = this.escapeHtml(toolCall.arguments || 'Sem argumentos');
-        }
-
-        content.appendChild(textDiv);
-        div.appendChild(content);
-
-        container.appendChild(div);
         this.scrollToBottom();
     }
 
