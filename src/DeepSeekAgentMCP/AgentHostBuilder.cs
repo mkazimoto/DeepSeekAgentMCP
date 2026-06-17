@@ -136,7 +136,11 @@ public static class AgentHostBuilder
             AuthToken = authToken,
             HttpsEnabled = httpsEnabled,
             HttpsCertificatePath = httpsCertPath,
-            MaxSessionsPerIp = maxSessionsPerIp
+            MaxSessionsPerIp = maxSessionsPerIp,
+            HttpClientTimeoutSeconds = doc.RootElement.TryGetProperty("HttpClient", out var httpClientProp) && httpClientProp.TryGetProperty("TimeoutSeconds", out var timeoutProp)
+                ? timeoutProp.GetInt32()
+                : 300,
+            ContinueOnToolError = !doc.RootElement.TryGetProperty("ContinueOnToolError", out var continueOnErrorProp) || continueOnErrorProp.GetBoolean()
         };
     }
 
@@ -182,7 +186,8 @@ public static class AgentHostBuilder
             config.Temperature,
             config.ThinkingConfig,
             config.ReasoningEffort,
-            logger);
+            logger,
+            config.HttpClientTimeoutSeconds);
     }
 
     /// <summary>

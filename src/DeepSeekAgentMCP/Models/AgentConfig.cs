@@ -56,4 +56,10 @@ public record AgentConfig
 
     /// <summary>Maximum active sessions per IP</summary>
     public int MaxSessionsPerIp { get; init; } = 5;
+
+    /// <summary>HttpClient timeout in seconds for DeepSeek API calls</summary>
+    public int HttpClientTimeoutSeconds { get; init; } = 300;
+
+    /// <summary>Whether to continue processing remaining tool calls when one fails</summary>
+    public bool ContinueOnToolError { get; init; } = true;
 }

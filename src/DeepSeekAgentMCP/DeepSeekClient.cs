@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -22,7 +23,7 @@ public class DeepSeekClient : IDisposable
 
     private const string BaseUrl = "https://api.deepseek.com";
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300)
     {
         _apiKey = apiKey;
         _model = model;
@@ -35,12 +36,12 @@ public class DeepSeekClient : IDisposable
         _httpClient = new HttpClient
         {
             BaseAddress = new Uri(BaseUrl),
-            Timeout = TimeSpan.FromMinutes(5)
+            Timeout = TimeSpan.FromSeconds(httpClientTimeoutSeconds)
         };
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
 
-        _logger?.LogInformation("DeepSeekClient initialized (model: {Model}, maxTokens: {MaxTokens}, temperature: {Temperature})",
-            model, maxTokens, temperature);
+        _logger?.LogInformation("DeepSeekClient initialized (model: {Model}, maxTokens: {MaxTokens}, temperature: {Temperature}, timeout: {Timeout}s)",
+            model, maxTokens, temperature, httpClientTimeoutSeconds);
     }
 
     /// <summary>
@@ -68,13 +69,12 @@ public class DeepSeekClient : IDisposable
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var maxRetries = 3;
-        var baseDelayMs = 1000;
-
-        var messageCount = messages.Count;
-        var toolCount = tools?.Count ?? 0;
         _logger?.LogDebug("Sending chat request (model: {Model}, messages: {Count}, tools: {ToolCount})",
-            _model, messageCount, toolCount);
+            _model, messages.Count, tools?.Count ?? 0);
+
+        // Retry with exponential backoff + jitter on 429 and 5xx
+        const int maxRetries = 3;
+        var baseDelayMs = 1000;
 
         for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
@@ -98,9 +98,14 @@ public class DeepSeekClient : IDisposable
                 // Retry on 429 (rate limit) and 5xx (server errors)
                 if (attempt < maxRetries && ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500))
                 {
-                    var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
-                    _logger?.LogWarning("DeepSeek retry {Attempt}/{MaxRetries} after {StatusCode} - waiting {Delay}ms",
+                    // Exponential backoff with jitter (±25% randomization)
+                    var delayMs = baseDelayMs * Math.Pow(2, attempt - 1);
+                    var jitter = delayMs * 0.25 * (Random.Shared.NextDouble() * 2 - 1);
+                    var delay = TimeSpan.FromMilliseconds(delayMs + jitter);
+
+                    _logger?.LogWarning("DeepSeek retry {Attempt}/{MaxRetries} after {StatusCode} — waiting {Delay}ms",
                         attempt, maxRetries, (int)response.StatusCode, delay.TotalMilliseconds);
+
                     await Task.Delay(delay, cancellationToken);
                     continue;
                 }
@@ -108,11 +113,15 @@ public class DeepSeekClient : IDisposable
                 // Non-retryable error
                 response.EnsureSuccessStatusCode();
             }
-            catch (HttpRequestException ex) when (attempt < maxRetries)
+            catch (HttpRequestException) when (attempt < maxRetries)
             {
-                var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
-                _logger?.LogWarning(ex, "DeepSeek retry {Attempt}/{MaxRetries} after HttpRequestException - waiting {Delay}ms",
+                var delayMs = baseDelayMs * Math.Pow(2, attempt - 1);
+                var jitter = delayMs * 0.25 * (Random.Shared.NextDouble() * 2 - 1);
+                var delay = TimeSpan.FromMilliseconds(delayMs + jitter);
+
+                _logger?.LogWarning("DeepSeek retry {Attempt}/{MaxRetries} after HttpRequestException — waiting {Delay}ms",
                     attempt, maxRetries, delay.TotalMilliseconds);
+
                 await Task.Delay(delay, cancellationToken);
             }
         }
@@ -210,3 +219,5 @@ public class DeepSeekClient : IDisposable
 }
 
 
+
+// Polly test

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeepSeekAgentMCP.Models;
@@ -34,6 +35,9 @@ public class McpServerConfig
 
     [JsonPropertyName("EnvironmentVariables")]
     public Dictionary<string, string>? EnvironmentVariables { get; set; }
+
+    [JsonPropertyName("TimeoutSeconds")]
+    public int TimeoutSeconds { get; set; } = 60;
 }
 
 /// <summary>
@@ -53,6 +57,11 @@ public class McpToolManager : IAsyncDisposable
     private readonly List<McpClientWrapper> _clients = [];
     private readonly object _clientsLock = new();
     private readonly string _configPath;
+    private readonly ConcurrentDictionary<string, int> _failureCounts = new();
+    private Timer? _healthCheckTimer;
+    private readonly int _maxConsecutiveFailures = 3;
+    private readonly TimeSpan _healthCheckInterval = TimeSpan.FromMinutes(2);
+    private bool _disposed;
 
     public McpToolManager(string configPath)
     {
@@ -76,63 +85,139 @@ public class McpToolManager : IAsyncDisposable
 
         foreach (var serverConfig in config.McpServers.Where(s => s.Enabled))
         {
-            try
-            {
-                Console.WriteLine($"[MCP] Connecting to server: {serverConfig.Name}...");
-
-                IClientTransport transport;
-
-                if (serverConfig.TransportType.Equals("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    var httpOptions = new HttpClientTransportOptions
-                    {
-                        Endpoint = new Uri(serverConfig.Url ?? throw new InvalidOperationException($"HTTP transport requires a 'Url' for server '{serverConfig.Name}'.")),
-                        TransportMode = HttpTransportMode.StreamableHttp
-                    };
-
-                    if (serverConfig.Headers is { Count: > 0 })
-                    {
-                        httpOptions.AdditionalHeaders = new Dictionary<string, string>(serverConfig.Headers);
-                    }
-
-                    transport = new HttpClientTransport(httpOptions);
-                }
-                else
-                {
-                    var options = new StdioClientTransportOptions
-                    {
-                        Name = serverConfig.Name,
-                        Command = serverConfig.Command,
-                        Arguments = serverConfig.Arguments
-                    };
-
-                    transport = new StdioClientTransport(options);
-                }
-
-                var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
-
-                var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
-                lock (_clientsLock)
-                {
-                    _clients.Add(new McpClientWrapper(serverConfig.Name, client, tools));
-                }
-
-                Console.WriteLine($"[MCP] Connected to '{serverConfig.Name}' with {tools.Count} tool(s).");
-                foreach (var tool in tools)
-                {
-                    Console.WriteLine($"  - {tool.Name}: {tool.Description}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[MCP] Failed to connect to '{serverConfig.Name}': {ex.Message}");
-            }
+            await ConnectServerAsync(serverConfig, cancellationToken);
         }
 
         lock (_clientsLock)
         {
             Console.WriteLine($"[MCP] Total connected servers: {_clients.Count}");
         }
+
+        StartHealthCheckLoop();
+    }
+
+    /// <summary>
+    /// Connects to a single MCP server.
+    /// </summary>
+    private async Task ConnectServerAsync(McpServerConfig serverConfig, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            Console.WriteLine($"[MCP] Connecting to server: {serverConfig.Name}...");
+
+            IClientTransport transport;
+
+            if (serverConfig.TransportType.Equals("http", StringComparison.OrdinalIgnoreCase))
+            {
+                var httpOptions = new HttpClientTransportOptions
+                {
+                    Endpoint = new Uri(serverConfig.Url ?? throw new InvalidOperationException($"HTTP transport requires a 'Url' for server '{serverConfig.Name}'.")),
+                    TransportMode = HttpTransportMode.StreamableHttp
+                };
+
+                if (serverConfig.Headers is { Count: > 0 })
+                {
+                    httpOptions.AdditionalHeaders = new Dictionary<string, string>(serverConfig.Headers);
+                }
+
+                transport = new HttpClientTransport(httpOptions);
+            }
+            else
+            {
+                var options = new StdioClientTransportOptions
+                {
+                    Name = serverConfig.Name,
+                    Command = serverConfig.Command,
+                    Arguments = serverConfig.Arguments
+                };
+
+                transport = new StdioClientTransport(options);
+            }
+
+            var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
+
+            var tools = await client.ListToolsAsync(cancellationToken: cancellationToken);
+            lock (_clientsLock)
+            {
+                // Remove existing wrapper for the same server if reconnecting
+                _clients.RemoveAll(w => string.Equals(w.ServerName, serverConfig.Name, StringComparison.Ordinal));
+                _clients.Add(new McpClientWrapper(serverConfig.Name, serverConfig, client, tools));
+            }
+
+            _failureCounts.TryRemove(serverConfig.Name, out _);
+
+            Console.WriteLine($"[MCP] Connected to '{serverConfig.Name}' with {tools.Count} tool(s).");
+            foreach (var tool in tools)
+            {
+                Console.WriteLine($"  - {tool.Name}: {tool.Description}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MCP] Failed to connect to '{serverConfig.Name}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Starts periodic health check loop with automatic reconnection.
+    /// </summary>
+    private void StartHealthCheckLoop()
+    {
+        _healthCheckTimer = new Timer(async _ =>
+        {
+            List<McpClientWrapper> snapshot;
+            lock (_clientsLock)
+            {
+                snapshot = [.. _clients];
+            }
+
+            foreach (var wrapper in snapshot)
+            {
+                try
+                {
+                    using var healthCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    await wrapper.Client.ListToolsAsync(cancellationToken: healthCts.Token);
+                    _failureCounts.TryRemove(wrapper.ServerName, out int _);
+                }
+                catch (Exception ex)
+                {
+                    var count = _failureCounts.AddOrUpdate(wrapper.ServerName, 1, (_, c) => c + 1);
+                    Console.WriteLine($"[MCP] Health check failed for '{wrapper.ServerName}' ({count}/{_maxConsecutiveFailures}): {ex.Message}");
+
+                    if (count >= _maxConsecutiveFailures)
+                    {
+                        Console.WriteLine($"[MCP] Initiating reconnection for '{wrapper.ServerName}'...");
+                        _failureCounts.TryRemove(wrapper.ServerName, out int _);
+
+                        // Remove failed client
+                        McpClient? oldClient = null;
+                        McpServerConfig? serverConfig = null;
+                        lock (_clientsLock)
+                        {
+                            var idx = _clients.FindIndex(w => string.Equals(w.ServerName, wrapper.ServerName, StringComparison.Ordinal));
+                            if (idx >= 0)
+                            {
+                                oldClient = _clients[idx].Client;
+                                serverConfig = _clients[idx].Config;
+                                _clients.RemoveAt(idx);
+                            }
+                        }
+
+                        // Reconnect
+                        if (serverConfig != null)
+                        {
+                            await ConnectServerAsync(serverConfig, CancellationToken.None);
+                        }
+
+                        // Dispose old client after replacement
+                        if (oldClient != null)
+                        {
+                            try { await oldClient.DisposeAsync(); } catch { }
+                        }
+                    }
+                }
+            }
+        }, null, _healthCheckInterval, _healthCheckInterval);
     }
 
     /// <summary>
@@ -203,12 +288,21 @@ public class McpToolManager : IAsyncDisposable
                     ? new Dictionary<string, object?>()
                     : JsonSerializer.Deserialize<Dictionary<string, object?>>(toolCall.Function.Arguments) ?? [];
 
-                var result = await tool.CallAsync(arguments, cancellationToken: cancellationToken);
+                // Apply per-server timeout
+                var timeoutSeconds = wrapper.Config.TimeoutSeconds > 0 ? wrapper.Config.TimeoutSeconds : 60;
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+                var result = await tool.CallAsync(arguments, cancellationToken: linkedCts.Token);
                 var textParts = result.Content
                     .Where(c => c is not null && c.Type == "text")
                     .Select(c => c.ToString() ?? string.Empty);
 
                 return string.Join("\n", textParts);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return $"Error: Tool '{functionName}' timed out after {wrapper.Config.TimeoutSeconds} seconds.";
             }
             catch (Exception ex)
             {
@@ -236,7 +330,9 @@ public class McpToolManager : IAsyncDisposable
         var lines = new List<string> { $"MCP Servers ({snapshot.Count} connected):" };
         foreach (var wrapper in snapshot)
         {
-            lines.Add($"  - {wrapper.ServerName}: {wrapper.Tools.Count} tool(s)");
+            var failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0);
+            var healthMark = failures > 0 ? $" ⚠ ({failures}/{_maxConsecutiveFailures} failures)" : " ✓";
+            lines.Add($"  - {wrapper.ServerName}: {wrapper.Tools.Count} tool(s){healthMark}");
         }
         return string.Join("\n", lines);
     }
@@ -257,7 +353,9 @@ public class McpToolManager : IAsyncDisposable
         {
             name = wrapper.ServerName,
             connected = true,
-            toolCount = wrapper.Tools.Count
+            toolCount = wrapper.Tools.Count,
+            failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0),
+            timeoutSeconds = wrapper.Config.TimeoutSeconds
         }).ToList();
     }
 
@@ -275,6 +373,11 @@ public class McpToolManager : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
+
+        _healthCheckTimer?.Dispose();
+
         List<McpClientWrapper> snapshot;
 
         lock (_clientsLock)
@@ -294,10 +397,12 @@ public class McpToolManager : IAsyncDisposable
                 Console.WriteLine($"[MCP] Error disposing '{wrapper.ServerName}': {ex.Message}");
             }
         }
+
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
-    /// Internal wrapper to associate server name with client and tools.
+    /// Internal wrapper to associate server name, config, client, and tools.
     /// </summary>
-    private record McpClientWrapper(string ServerName, McpClient Client, IList<McpClientTool> Tools);
+    private record McpClientWrapper(string ServerName, McpServerConfig Config, McpClient Client, IList<McpClientTool> Tools);
 }

@@ -14,6 +14,7 @@ public class DeepSeekAgent : IAsyncDisposable
     private readonly List<ChatMessage> _conversationHistory = [];
     private readonly int _maxHistoryMessages;
     private readonly bool _streamingEnabled;
+    private readonly bool _continueOnToolError;
     private readonly object _historyLock = new();
     private readonly object _eventLock = new();
 
@@ -41,12 +42,14 @@ public class DeepSeekAgent : IAsyncDisposable
         DeepSeekClient deepSeek,
         McpToolManager mcpToolManager,
         int maxHistoryMessages = 50,
-        bool streamingEnabled = true)
+        bool streamingEnabled = true,
+        bool continueOnToolError = true)
     {
         _deepSeek = deepSeek;
         _mcpToolManager = mcpToolManager;
         _maxHistoryMessages = maxHistoryMessages;
         _streamingEnabled = streamingEnabled;
+        _continueOnToolError = continueOnToolError;
 
         lock (_historyLock)
         {
@@ -148,6 +151,7 @@ public class DeepSeekAgent : IAsyncDisposable
             // Check if the model wants to call tools
             if (message.ToolCalls is { Count: > 0 })
             {
+                var toolFailed = false;
                 foreach (var toolCall in message.ToolCalls)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -156,7 +160,32 @@ public class DeepSeekAgent : IAsyncDisposable
 
                     var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
 
-                    Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
+                    var isError = toolResult.StartsWith("Error:", StringComparison.Ordinal);
+                    if (isError)
+                    {
+                        Console.WriteLine($"[Tool Error] {toolResult}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
+                    }
+
+                    // If tool failed and ContinueOnToolError is false, stop the batch
+                    if (isError && !_continueOnToolError)
+                    {
+                        toolFailed = true;
+                        lock (_historyLock)
+                        {
+                            _conversationHistory.Add(new ChatMessage
+                            {
+                                Role = "tool",
+                                ToolCallId = toolCall.Id,
+                                Name = toolCall.Function.Name,
+                                Content = toolResult
+                            });
+                        }
+                        break;
+                    }
 
                     // Add tool result to conversation
                     lock (_historyLock)
@@ -176,6 +205,13 @@ public class DeepSeekAgent : IAsyncDisposable
                 {
                     TrimConversationHistory();
                 }
+
+                // If a tool failed and ContinueOnToolError is false, return error to user
+                if (toolFailed)
+                {
+                    return "An error occurred while executing a tool. The request could not be completed.";
+                }
+
                 continue;
             }
 
