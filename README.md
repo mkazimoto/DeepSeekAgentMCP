@@ -43,13 +43,7 @@ export DEEPSEEK_API_KEY="sua-chave-aqui"
 
 Edite o arquivo `config/mcp-servers.json` para adicionar os servidores MCP desejados.
 
-Servidores pré-configurados:
-
-| Nome | Comando | Descrição |
-|------|---------|-----------|
-| Filesystem | `npx -y @modelcontextprotocol/server-filesystem` | Acesso ao sistema de arquivos |
-| Fetch | `npx -y @modelcontextprotocol/server-fetch` | Busca de páginas web |
-| GitHub | `npx -y @modelcontextprotocol/server-github` | Integração com GitHub (requer token) |
+> Servidores MCP são configurados em `config/mcp-servers.json`. Consulte a documentação de cada servidor para配置 específica.
 
 ### 3. Executar
 
@@ -68,7 +62,22 @@ dotnet run
 | `/mcp` | Mostrar status dos servidores MCP |
 | `/help` | Mostrar ajuda |
 
-## 🧩 Adicionar Novos Servidores MCP
+## � Testes
+
+```bash
+# Executar todos os testes
+dotnet test
+
+# Executar testes com verbose
+dotnet test --logger "console;verbosity=detailed"
+```
+
+O projeto inclui testes unitários para:
+- **InputSanitizer** — Sanitização de entrada, prevenção de prompt injection e XSS
+- **RateLimiter** — Sliding window rate limiting, limites por chave, reset
+- **PathHelper** — Descoberta de caminhos em cenários de desenvolvimento e publicação
+
+## �🧩 Adicionar Novos Servidores MCP
 
 Adicione novas entradas em `config/mcp-servers.json`:
 
@@ -90,17 +99,41 @@ Adicione novas entradas em `config/mcp-servers.json`:
 ```
 DeepSeekAgentMCP/
 ├── config/
-│   ├── appsettings.json        # Configuração principal
-│   └── mcp-servers.json        # Configuração dos servidores MCP
+│   ├── appsettings.json            # Configuração principal
+│   └── mcp-servers.json            # Configuração dos servidores MCP
+├── scripts/
+│   └── install-service.ps1        # Instalação do Windows Service
 ├── src/DeepSeekAgentMCP/
 │   ├── Models/
-│   │   ├── ChatMessage.cs      # Modelos de mensagem
-│   │   └── DeepSeekResponses.cs # Modelos de requisição/resposta
-│   ├── DeepSeekClient.cs       # Cliente HTTP para DeepSeek API
-│   ├── McpToolManager.cs       # Gerenciador de servidores MCP
-│   ├── DeepSeekAgent.cs        # Lógica principal do agente
-│   └── Program.cs              # Ponto de entrada e loop interativo
-├── DeepSeekAgentMCP.sln
+│   │   ├── AgentConfig.cs         # Modelo de configuração do agente
+│   │   ├── ChatMessage.cs         # Modelos de mensagem
+│   │   └── DeepSeekResponses.cs   # Modelos de requisição/resposta
+│   ├── Skills/                    # Skills internas (templates para o modelo)
+│   │   ├── cte-recursivo-auto-relacionamento.md
+│   │   └── ...
+│   ├── wwwroot/                   # Interface web
+│   │   ├── index.html
+│   │   ├── css/styles.css
+│   │   └── js/app.js
+│   ├── AgentHostBuilder.cs        # Factory centralizada de componentes
+│   ├── DeepSeekAgent.cs           # Orquestrador do agente
+│   ├── DeepSeekAgentService.cs    # Windows Service Host
+│   ├── DeepSeekClient.cs          # Cliente HTTP para DeepSeek API
+│   ├── InputSanitizer.cs          # Sanitização anti-prompt injection
+│   ├── instructions.md            # System prompt base
+│   ├── McpToolManager.cs          # Gerenciamento de servidores MCP
+│   ├── PathHelper.cs              # Descoberta de caminhos
+│   ├── Program.cs                 # Ponto de entrada
+│   ├── RateLimiter.cs             # Rate limiter sliding window
+│   ├── SessionManager.cs          # Gerenciamento de sessões
+│   ├── SkillLoader.cs             # Carregamento de skills
+│   └── WebAppExtensions.cs        # Endpoints da API REST
+├── tests/
+│   └── DeepSeekAgentMCP.Tests/    # Testes unitários (xUnit)
+│       ├── InputSanitizerTests.cs
+│       ├── RateLimiterTests.cs
+│       └── PathHelperTests.cs
+├── DeepSeekAgentMCP.slnx
 └── README.md
 ```
 

@@ -7,7 +7,7 @@ namespace DeepSeekAgentMCP;
 /// Gerencia múltiplas sessões de conversa, cada uma com seu próprio agente.
 /// Cada sessão possui um DeepSeekAgent isolado com seu próprio histórico.
 /// </summary>
-public class SessionManager : IDisposable
+public class SessionManager : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, SessionState> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeRequests = new(StringComparer.Ordinal);
@@ -15,6 +15,7 @@ public class SessionManager : IDisposable
     private readonly McpToolManager _mcpToolManager;
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(30);
+    private bool _disposed;
 
     public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager)
     {
@@ -123,13 +124,15 @@ public class SessionManager : IDisposable
     }
 
     /// <summary>
-    /// Removes a session entirely.
+    /// Removes a session entirely and disposes its agent.
     /// </summary>
     public bool RemoveSession(string sessionId)
     {
         if (_sessions.TryRemove(sessionId, out var state))
         {
             Console.WriteLine($"[Session] Removed session: {sessionId}");
+            // Fire-and-forget dispose do agente
+            _ = DisposeAgentAsync(state.Agent);
             return true;
         }
         return false;
@@ -164,9 +167,11 @@ public class SessionManager : IDisposable
 
         foreach (var id in staleIds)
         {
-            if (_sessions.TryRemove(id, out _))
+            if (_sessions.TryRemove(id, out var state))
             {
                 Console.WriteLine($"[Session] Cleaned up stale session: {id}");
+                // Dispose do agente (fire-and-forget dentro do timer)
+                _ = DisposeAgentAsync(state.Agent);
             }
         }
 
@@ -176,10 +181,48 @@ public class SessionManager : IDisposable
         }
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Disposes all sessions asynchronously.
+    /// </summary>
+    public async ValueTask DisposeAsync()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         _cleanupTimer.Dispose();
+
+        // Dispose all agents
+        var agents = _sessions.Values.Select(s => s.Agent).ToList();
         _sessions.Clear();
+
+        foreach (var agent in agents)
+        {
+            try
+            {
+                await agent.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Session] Error disposing agent: {ex.Message}");
+            }
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Helper to safely dispose an agent asynchronously.
+    /// </summary>
+    private static async Task DisposeAgentAsync(DeepSeekAgent agent)
+    {
+        try
+        {
+            await agent.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Session] Error disposing agent: {ex.Message}");
+        }
     }
 
     private class SessionState

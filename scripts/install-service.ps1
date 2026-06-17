@@ -19,10 +19,11 @@
 
 param(
     [ValidateSet("install", "uninstall", "status")]
-    [string]$Action = "install"
+    [string]$Action = "install",
+    [string]$ServiceName = "DeepSeekAgentMCP",
+    [string]$ServiceDependency = ""
 )
 
-$ServiceName = "DeepSeekAgentMCP2"
 $DisplayName = "DeepSeek Agent MCP Service"
 $Description = "Agente inteligente DeepSeek com suporte a MCP (Model Context Protocol) para consultas a bancos de dados e ferramentas externas."
 $ProjectPath = Join-Path $PSScriptRoot "..\src\DeepSeekAgentMCP\DeepSeekAgentMCP.csproj"
@@ -114,12 +115,21 @@ function Install-Service {
 
     Write-Info "Instalando serviço '$ServiceName'..."
     
-    # Create the service with dependency on TotvsRmDatabaseMcpServer2
-    & sc.exe create $ServiceName `
-        binPath="$exePath --service" `
-        start=auto `
-        depend=totvsrmdatabasemcpserver2.exe `
-        DisplayName=$DisplayName 2>&1 | Out-Null
+    # Build sc.exe create command
+    $scArgs = @(
+        "create", $ServiceName,
+        "binPath=$exePath --service",
+        "start=auto",
+        "DisplayName=$DisplayName"
+    )
+
+    # Add optional service dependency (if specified)
+    if ($ServiceDependency) {
+        $scArgs += "depend=$ServiceDependency"
+        Write-Info "Service dependency: $ServiceDependency"
+    }
+
+    & sc.exe $scArgs 2>&1 | Out-Null
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Falha ao criar o serviço. Execute o PowerShell como Administrador."

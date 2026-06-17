@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/DeepSeekAgentMCP/DeepSeekAgentMCP.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DeepSeekAgentMCP.Tests/DeepSeekAgentMCP.Tests.csproj" />
+  </Folder>
 </Solution>

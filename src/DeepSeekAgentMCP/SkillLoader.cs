@@ -14,7 +14,7 @@ public static partial class SkillLoader
     private static string? _cachedSkillsPrompt;
     private static DateTime _lastCacheLoad = DateTime.MinValue;
     private static FileSystemWatcher? _fileWatcher;
-    private static readonly object _cacheLock = new();
+    private static readonly ReaderWriterLockSlim _cacheLock = new();
 
     /// <summary>
     /// Timestamp do último carregamento do cache de skills.
@@ -58,11 +58,16 @@ public static partial class SkillLoader
         if (_baseDirectory == null)
             return string.Empty;
 
-        // Retorna cache se disponível
-        lock (_cacheLock)
+        // Retorna cache se disponível (leitura concorrente)
+        _cacheLock.EnterReadLock();
+        try
         {
             if (_cachedSkillsPrompt != null)
                 return _cachedSkillsPrompt;
+        }
+        finally
+        {
+            _cacheLock.ExitReadLock();
         }
 
         // Only top-level .md files — ignora subdiretórios para evitar Skills/Skills/ duplicado
@@ -112,11 +117,16 @@ public static partial class SkillLoader
 
         var result = sb.ToString();
 
-        // Atualiza cache
-        lock (_cacheLock)
+        // Atualiza cache (escrita exclusiva)
+        _cacheLock.EnterWriteLock();
+        try
         {
             _cachedSkillsPrompt = result;
             _lastCacheLoad = DateTime.UtcNow;
+        }
+        finally
+        {
+            _cacheLock.ExitWriteLock();
         }
 
         return result;
@@ -127,9 +137,14 @@ public static partial class SkillLoader
     /// </summary>
     public static void InvalidateCache()
     {
-        lock (_cacheLock)
+        _cacheLock.EnterWriteLock();
+        try
         {
             _cachedSkillsPrompt = null;
+        }
+        finally
+        {
+            _cacheLock.ExitWriteLock();
         }
         Console.WriteLine("[SkillLoader] Cache invalidated.");
     }

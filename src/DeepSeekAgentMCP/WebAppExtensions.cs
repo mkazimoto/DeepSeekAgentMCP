@@ -9,10 +9,9 @@ namespace DeepSeekAgentMCP;
 /// </summary>
 public static class WebAppExtensions
 {
-    // Rate limiter: 30 requests por minuto por IP (ajustável)
-    private static readonly RateLimiter ChatRateLimiter = new(
-        maxRequests: 30,
-        windowSize: TimeSpan.FromMinutes(1));
+    // Rate limiter: sliding window por IP
+    private static RateLimiter? _chatRateLimiter;
+    private static readonly object _rateLimiterLock = new();
 
     /// <summary>
     /// Maps all common agent API endpoints (chat, status, history, cancel, clear, health).
@@ -24,6 +23,23 @@ public static class WebAppExtensions
         string model,
         ILogger? logger = null)
     {
+        return MapAgentEndpoints(app, sessionManager, mcpManager, model, 30, logger);
+    }
+
+    /// <summary>
+    /// Maps all common agent API endpoints with configurable rate limit.
+    /// </summary>
+    public static WebApplication MapAgentEndpoints(
+        this WebApplication app,
+        SessionManager sessionManager,
+        McpToolManager mcpManager,
+        string model,
+        int maxRequestsPerMinute,
+        ILogger? logger = null)
+    {
+        // Initialize rate limiter with configured value
+        EnsureRateLimiter(maxRequestsPerMinute);
+
         // POST /api/chat — send a message (com rate limiting e sanitização)
         app.MapPost("/api/chat", async (HttpContext httpContext, ChatRequest request, CancellationToken ct) =>
         {
@@ -39,7 +55,7 @@ public static class WebAppExtensions
 
             // --- Rate limiting por IP ---
             var clientIp = GetClientIp(httpContext);
-            if (!ChatRateLimiter.TryConsume(clientIp))
+            if (!_chatRateLimiter!.TryConsume(clientIp))
             {
                 logger?.LogWarning("Rate limit exceeded for IP: {ClientIp}", clientIp);
                 var retryAfter = TimeSpan.FromMinutes(1);
@@ -67,7 +83,7 @@ public static class WebAppExtensions
                 return Results.Ok(new
                 {
                     response = safeResponse,
-                    remaining = ChatRateLimiter.GetRemainingRequests(clientIp)
+                    remaining = _chatRateLimiter.GetRemainingRequests(clientIp)
                 });
             }
             catch (Exception ex)
@@ -88,8 +104,8 @@ public static class WebAppExtensions
                 mcpServers = mcpManager.GetServerStatusList(),
                 rateLimit = new
                 {
-                    remaining = ChatRateLimiter.GetRemainingRequests(clientIp),
-                    maxPerMinute = 30
+                    remaining = _chatRateLimiter!.GetRemainingRequests(clientIp),
+                    maxPerMinute = maxRequestsPerMinute
                 }
             });
         });
@@ -168,5 +184,25 @@ public static class WebAppExtensions
 
         // Fallback para o IP direto da conexão
         return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    }
+
+    /// <summary>
+    /// Ensures the rate limiter is initialized with the configured value.
+    /// Thread-safe lazy initialization.
+    /// </summary>
+    private static void EnsureRateLimiter(int maxRequestsPerMinute)
+    {
+        if (_chatRateLimiter != null)
+            return;
+
+        lock (_rateLimiterLock)
+        {
+            if (_chatRateLimiter == null)
+            {
+                _chatRateLimiter = new RateLimiter(
+                    maxRequests: maxRequestsPerMinute,
+                    windowSize: TimeSpan.FromMinutes(1));
+            }
+        }
     }
 }

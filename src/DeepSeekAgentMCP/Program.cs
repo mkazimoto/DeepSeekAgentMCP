@@ -1,5 +1,5 @@
 ﻿using DeepSeekAgentMCP;
-using System.Text.Json;
+using DeepSeekAgentMCP.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -66,54 +66,25 @@ static async Task RunAsConsoleAsync()
     Console.ResetColor();
     Console.WriteLine("=== DeepSeek Agent with MCP Support ===\n");
 
-    // --- Configuration ---
-    var configPath = PathHelper.FindConfigPath();
+    // --- Configuration via AgentHostBuilder ---
+    var config = await AgentHostBuilder.LoadConfigAsync();
 
-    string apiKey;
-    string model;
-    int maxTokens;
-    double temperature;
-    bool webEnabled = false;
-    string? webUrls = null;
-    bool launchBrowser = false;
+    Console.WriteLine($"Config file: {PathHelper.FindConfigPath()}");
 
-    if (File.Exists(configPath))
+    // Validate configuration
+    var configErrors = AgentHostBuilder.ValidateConfig(config);
+    if (configErrors.Count > 0)
     {
-        var configJson = await File.ReadAllTextAsync(configPath);
-        using var doc = JsonDocument.Parse(configJson);
-        var deepSeekConfig = doc.RootElement.GetProperty("DeepSeek");
-
-        apiKey = deepSeekConfig.TryGetProperty("ApiKey", out var apiKeyProp)
-            ? apiKeyProp.GetString() ?? string.Empty
-            : string.Empty;
-        model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-v4-flash";
-        maxTokens = deepSeekConfig.GetProperty("MaxTokens").GetInt32();
-        temperature = deepSeekConfig.GetProperty("Temperature").GetDouble();
-
-        if (doc.RootElement.TryGetProperty("WebServer", out var webConfig))
+        foreach (var error in configErrors)
         {
-            webEnabled = webConfig.GetProperty("Enabled").GetBoolean();
-            webUrls = webConfig.GetProperty("Urls").GetString();
-            launchBrowser = webConfig.GetProperty("LaunchBrowser").GetBoolean();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"\n\u26a0 {error}");
+            Console.ResetColor();
         }
-
-        Console.WriteLine($"Config file: {configPath}");
-    }
-    else
-    {
-        Console.WriteLine("Config file not found. Using environment variables or defaults.");
-        apiKey = GetEnvDeepSeekApiKey();
-        model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-v4-flash";
-        maxTokens = 4096;
-        temperature = 0.7;
     }
 
-    if (string.IsNullOrWhiteSpace(apiKey))
-    {
-        apiKey = GetEnvDeepSeekApiKey();
-    }
-
-    if (string.IsNullOrWhiteSpace(apiKey))
+    // Prompt for API key if still missing
+    if (string.IsNullOrWhiteSpace(config.ApiKey))
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("\n\u26a0 DeepSeek API Key not found!");
@@ -122,34 +93,34 @@ static async Task RunAsConsoleAsync()
         Console.WriteLine("  2. Set environment variable: DEEPSEEK_API_KEY");
         Console.ResetColor();
         Console.Write("\nEnter your DeepSeek API Key: ");
-        apiKey = Console.ReadLine()?.Trim() ?? string.Empty;
+        var manualKey = Console.ReadLine()?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(manualKey))
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine("No API key provided. Exiting.");
             Console.ResetColor();
             return;
         }
+
+        config = config with { ApiKey = manualKey };
     }
 
     // --- Initialize Agent ---
-    var mcpConfigFullPath = PathHelper.FindMcpConfigPath(configPath);
-
-    var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature);
-    var mcpManager = new McpToolManager(mcpConfigFullPath);
+    var mcpManager = await AgentHostBuilder.CreateMcpManagerAsync(config);
+    var deepSeekClient = AgentHostBuilder.CreateClient(config);
     var agent = new DeepSeekAgent(deepSeekClient, mcpManager);
 
-    await agent.InitializeAsync();
+    // MCP já foi inicializado por CreateMcpManagerAsync
 
     Console.WriteLine(agent.GetMcpStatus());
     Console.WriteLine();
 
     // --- Start Web Server or Console Mode ---
-    if (webEnabled)
+    if (config.WebEnabled)
     {
         var sessionManager = new SessionManager(deepSeekClient, mcpManager);
-        await RunWebServerAsync(sessionManager, mcpManager, model, webUrls ?? "http://localhost:5000", launchBrowser);
+        await RunWebServerAsync(sessionManager, mcpManager, config);
     }
     else
     {
@@ -160,35 +131,21 @@ static async Task RunAsConsoleAsync()
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, string model, string urls, bool launchBrowser)
+static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, AgentConfig config)
 {
     Console.ForegroundColor = ConsoleColor.Green;
-    Console.WriteLine($"\n Starting web interface at {urls}");
+    Console.WriteLine($"\n Starting web interface at {config.WebUrls}");
     Console.ResetColor();
 
-    var contentRoot = PathHelper.FindContentRoot();
+    var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config);
 
-    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-    {
-        Args = [],
-        ContentRootPath = contentRoot,
-        WebRootPath = "wwwroot"
-    });
-
-    builder.WebHost.UseUrls(urls);
-    var app = builder.Build();
-    app.UseStaticFiles();
-
-    // Register all agent API endpoints via shared extension method
-    app.MapAgentEndpoints(sessionManager, mcpManager, model);
-
-    if (launchBrowser)
+    if (config.LaunchBrowser)
     {
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo
             {
-                FileName = urls,
+                FileName = config.WebUrls,
                 UseShellExecute = true
             };
             System.Diagnostics.Process.Start(psi);
@@ -301,16 +258,6 @@ static async Task RunConsoleModeAsync(DeepSeekAgent agent)
             Console.ResetColor();
         }
     }
-}
-
-// ===================================================================
-//  Helper Methods
-// ===================================================================
-static string GetEnvDeepSeekApiKey()
-{
-    return Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY", EnvironmentVariableTarget.Process)
-        ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY", EnvironmentVariableTarget.User)
-        ?? string.Empty;
 }
 
 // --- Request Model ---
