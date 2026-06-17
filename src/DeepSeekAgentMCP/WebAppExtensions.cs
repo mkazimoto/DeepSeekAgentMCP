@@ -14,20 +14,20 @@ public static class WebAppExtensions
         new RateLimiter(maxRequests: 30, windowSize: TimeSpan.FromMinutes(1)));
 
     /// <summary>
-    /// Maps all common agent API endpoints (chat, status, history, cancel, clear, health).
+    /// Maps all common agent API endpoints with config from AgentConfig.
     /// </summary>
     public static WebApplication MapAgentEndpoints(
         this WebApplication app,
         SessionManager sessionManager,
         McpToolManager mcpManager,
-        string model,
+        AgentConfig config,
         ILogger? logger = null)
     {
-        return MapAgentEndpoints(app, sessionManager, mcpManager, model, 30, logger);
+        return MapAgentEndpoints(app, sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, config.RequireAuth, config.AuthToken, config.MaxSessionsPerIp, logger);
     }
 
     /// <summary>
-    /// Maps all common agent API endpoints with configurable rate limit.
+    /// Maps all common agent API endpoints with granular parameters.
     /// </summary>
     public static WebApplication MapAgentEndpoints(
         this WebApplication app,
@@ -35,11 +35,36 @@ public static class WebAppExtensions
         McpToolManager mcpManager,
         string model,
         int maxRequestsPerMinute,
+        bool requireAuth,
+        string? authToken,
+        int maxSessionsPerIp,
         ILogger? logger = null)
     {
+        // --- Helper to check authentication ---
+        static IResult? CheckAuth(HttpContext httpContext, bool requireAuth, string? authToken)
+        {
+            if (!requireAuth || string.IsNullOrEmpty(authToken))
+                return null;
+
+            var provided = httpContext.Request.Headers.Authorization.FirstOrDefault()?.Replace("Bearer ", "")
+                ?? httpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+
+            if (string.IsNullOrEmpty(provided) || !string.Equals(provided, authToken, StringComparison.Ordinal))
+            {
+                httpContext.Response.Headers.WWWAuthenticate = "Bearer";
+                return Results.Json(new { error = "Unauthorized. Provide a valid API key via Authorization: Bearer header or X-API-Key header." }, statusCode: 401);
+            }
+
+            return null;
+        }
+
         // POST /api/chat — send a message (com rate limiting e sanitização)
         app.MapPost("/api/chat", async (HttpContext httpContext, ChatRequest request, CancellationToken ct) =>
         {
+            // --- Autenticação ---
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             // --- Validações básicas ---
             if (string.IsNullOrWhiteSpace(request.Message))
                 return Results.BadRequest(new { error = "Message is required." });
@@ -62,6 +87,20 @@ public static class WebAppExtensions
                     statusCode: (int)HttpStatusCode.TooManyRequests);
             }
 
+            // --- Limite de sessões por IP ---
+            var sessionId = GetSessionId(request);
+            if (!string.IsNullOrEmpty(clientIp) && clientIp != "unknown" && clientIp != "::1")
+            {
+                var sessionCount = sessionManager.GetSessionCountForIp(clientIp);
+                if (sessionCount >= maxSessionsPerIp && !sessionManager.SessionExists(sessionId))
+                {
+                    logger?.LogWarning("Session limit exceeded for IP: {ClientIp} ({Count}/{Max})", clientIp, sessionCount, maxSessionsPerIp);
+                    return Results.Json(
+                        new { error = $"Too many active sessions from this IP. Maximum is {maxSessionsPerIp}. Please clear an existing session or wait for cleanup." },
+                        statusCode: (int)HttpStatusCode.TooManyRequests);
+                }
+            }
+
             // --- Sanitização da mensagem ---
             var sanitizedMessage = InputSanitizer.SanitizeMessage(request.Message);
 
@@ -71,8 +110,7 @@ public static class WebAppExtensions
 
             try
             {
-                var sessionId = GetSessionId(request);
-                var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, ct);
+                var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, ct);
 
                 // Sanitiza a resposta para prevenir XSS no frontend
                 var safeResponse = InputSanitizer.SanitizeForDisplay(response);
@@ -93,6 +131,9 @@ public static class WebAppExtensions
         // GET /api/status — MCP server status + connected servers
         app.MapGet("/api/status", (HttpContext httpContext) =>
         {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             var clientIp = GetClientIp(httpContext);
             return Results.Ok(new
             {
@@ -108,8 +149,11 @@ public static class WebAppExtensions
         });
 
         // GET /api/history — conversation history for a session
-        app.MapGet("/api/history", (string? sessionId) =>
+        app.MapGet("/api/history", (HttpContext httpContext, string? sessionId) =>
         {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             var sid = sessionId ?? "default";
             var history = sessionManager.GetHistory(sid);
             var messages = history.Select(m => new
@@ -122,8 +166,11 @@ public static class WebAppExtensions
         });
 
         // POST /api/cancel — cancel an active request for a session
-        app.MapPost("/api/cancel", (ChatRequest request) =>
+        app.MapPost("/api/cancel", (HttpContext httpContext, ChatRequest request) =>
         {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
                 return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
 
@@ -133,8 +180,11 @@ public static class WebAppExtensions
         });
 
         // POST /api/clear — clear conversation for a session
-        app.MapPost("/api/clear", async (ChatRequest request) =>
+        app.MapPost("/api/clear", async (HttpContext httpContext, ChatRequest request) =>
         {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
                 return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
 
@@ -144,8 +194,11 @@ public static class WebAppExtensions
         });
 
         // GET /api/health — liveness/readiness probe
-        app.MapGet("/api/health", () =>
+        app.MapGet("/api/health", (HttpContext httpContext) =>
         {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            if (authResult != null) return authResult;
+
             return Results.Ok(new
             {
                 status = "healthy",

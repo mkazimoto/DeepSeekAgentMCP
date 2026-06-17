@@ -70,6 +70,54 @@ public static class AgentHostBuilder
             rateLimit = rateLimitProp.GetProperty("MaxRequestsPerMinute").GetInt32();
         }
 
+        // --- CORS origins ---
+        var allowedCorsOrigins = new List<string>();
+        if (doc.RootElement.TryGetProperty("Cors", out var corsProp) &&
+            corsProp.TryGetProperty("AllowedOrigins", out var originsProp))
+        {
+            foreach (var origin in originsProp.EnumerateArray())
+            {
+                var val = origin.GetString();
+                if (!string.IsNullOrWhiteSpace(val))
+                    allowedCorsOrigins.Add(val);
+            }
+        }
+
+        // --- Auth config ---
+        var requireAuth = false;
+        string? authToken = null;
+        if (doc.RootElement.TryGetProperty("Auth", out var authProp))
+        {
+            requireAuth = authProp.TryGetProperty("Enabled", out var authEnabledProp) && authEnabledProp.GetBoolean();
+            authToken = authProp.TryGetProperty("Token", out var authTokenProp)
+                ? authTokenProp.GetString()
+                : null;
+        }
+        // Auth token via env var takes precedence
+        authToken = Environment.GetEnvironmentVariable("DEEPSEEK_AGENT_AUTH_TOKEN") ?? authToken;
+
+        // --- HTTPS config ---
+        var httpsEnabled = false;
+        string? httpsCertPath = null;
+        string? httpsCertPassword = null;
+        if (doc.RootElement.TryGetProperty("Https", out var httpsProp))
+        {
+            httpsEnabled = httpsProp.TryGetProperty("Enabled", out var httpsEnabledProp) && httpsEnabledProp.GetBoolean();
+            httpsCertPath = httpsProp.TryGetProperty("CertificatePath", out var certPathProp)
+                ? certPathProp.GetString()
+                : null;
+            // Cert password ONLY from env var, never from config file
+            httpsCertPassword = Environment.GetEnvironmentVariable("DEEPSEEK_AGENT_HTTPS_PASSWORD");
+        }
+
+        var maxSessionsPerIp = 5;
+        if (doc.RootElement.TryGetProperty("SessionLimits", out var sessionLimitsProp))
+        {
+            maxSessionsPerIp = sessionLimitsProp.TryGetProperty("MaxSessionsPerIp", out var maxSessProp)
+                ? maxSessProp.GetInt32()
+                : 5;
+        }
+
         return new AgentConfig
         {
             ApiKey = ResolveApiKey(apiKey),
@@ -82,7 +130,13 @@ public static class AgentHostBuilder
             WebEnabled = webEnabled,
             WebUrls = webUrls,
             LaunchBrowser = launchBrowser,
-            RateLimitPerMinute = rateLimit
+            RateLimitPerMinute = rateLimit,
+            AllowedCorsOrigins = allowedCorsOrigins,
+            RequireAuth = requireAuth,
+            AuthToken = authToken,
+            HttpsEnabled = httpsEnabled,
+            HttpsCertificatePath = httpsCertPath,
+            MaxSessionsPerIp = maxSessionsPerIp
         };
     }
 
@@ -163,28 +217,75 @@ public static class AgentHostBuilder
             WebRootPath = "wwwroot"
         });
 
+        // --- CORS ---
+        if (config.AllowedCorsOrigins.Count > 0)
+        {
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.WithOrigins([.. config.AllowedCorsOrigins])
+                          .WithMethods("GET", "POST")
+                          .WithHeaders("Content-Type", "Authorization", "X-API-Key")
+                          .AllowCredentials();
+                });
+            });
+            logger?.LogInformation("CORS configured with {Count} allowed origins", config.AllowedCorsOrigins.Count);
+        }
+
+        // --- HTTPS ---
+        if (config.HttpsEnabled)
+        {
+            builder.WebHost.UseKestrel(options =>
+            {
+                options.ConfigureHttpsDefaults(httpsOptions =>
+                {
+                    if (!string.IsNullOrEmpty(config.HttpsCertificatePath))
+                    {
+                        var password = Environment.GetEnvironmentVariable("DEEPSEEK_AGENT_HTTPS_PASSWORD");
+                        if (!string.IsNullOrEmpty(password))
+                        {
+                            httpsOptions.ServerCertificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(
+                                System.IO.File.ReadAllBytes(config.HttpsCertificatePath), password);
+                        }
+                        else
+                        {
+                            httpsOptions.ServerCertificate = System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(config.HttpsCertificatePath);
+                        }
+                    }
+                });
+            });
+            logger?.LogInformation("HTTPS enabled");
+        }
+
         builder.WebHost.UseUrls(config.WebUrls);
         var app = builder.Build();
+
+        if (config.AllowedCorsOrigins.Count > 0)
+        {
+            app.UseCors();
+        }
+
         app.UseStaticFiles();
 
-        app.MapAgentEndpoints(sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, logger);
+        app.MapAgentEndpoints(sessionManager, mcpManager, config, logger);
 
         return app;
     }
 
     /// <summary>
-    /// Attempts to resolve the DeepSeek API key from config first,
-    /// then falls back to environment variables (Process scope, then User scope).
+    /// Resolves the DeepSeek API key with inverted precedence:
+    /// environment variables FIRST (Process scope, then User scope),
+    /// then falls back to config file as last resort.
     /// </summary>
     private static string ResolveApiKey(string configApiKey)
     {
-        if (!string.IsNullOrWhiteSpace(configApiKey))
-            return configApiKey;
-
+        // Priority 1: Process-level environment variable
         var envKey = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
         if (!string.IsNullOrWhiteSpace(envKey))
             return envKey;
 
+        // Priority 2: User-level environment variable (Windows only)
         if (OperatingSystem.IsWindows())
         {
 #pragma warning disable CA1416
@@ -192,6 +293,13 @@ public static class AgentHostBuilder
 #pragma warning restore CA1416
             if (!string.IsNullOrWhiteSpace(envKey))
                 return envKey;
+        }
+
+        // Priority 3: Config file (last resort — may be versioned)
+        if (!string.IsNullOrWhiteSpace(configApiKey))
+        {
+            System.Console.WriteLine("[WARNING] DeepSeek API Key loaded from config file. Consider using DEEPSEEK_API_KEY environment variable for better security.");
+            return configApiKey;
         }
 
         return string.Empty;

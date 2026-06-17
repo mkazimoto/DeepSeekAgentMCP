@@ -1,0 +1,13 @@
+{
+  "McpServers": [
+    {
+      "Name": "my-mcp-server",
+      "Enabled": true,
+      "TransportType": "http",
+      "Url": "http://localhost:3000/mcp",
+      "Headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
+    }
+  ]
+}

@@ -17,7 +17,7 @@ if (isService)
 }
 else
 {
-    await RunAsConsoleAsync();
+    await RunAsConsoleAsync(isService);
 }
 
 return;
@@ -59,7 +59,7 @@ static async Task RunAsServiceAsync()
 // ===================================================================
 //  Console Interactive Mode
 // ===================================================================
-static async Task RunAsConsoleAsync()
+static async Task RunAsConsoleAsync(bool isService)
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
     Console.WriteLine(@"DeepSeek Agent with MCP Support");
@@ -120,7 +120,7 @@ static async Task RunAsConsoleAsync()
     if (config.WebEnabled)
     {
         var sessionManager = new SessionManager(deepSeekClient, mcpManager);
-        await RunWebServerAsync(sessionManager, mcpManager, config);
+        await RunWebServerAsync(sessionManager, mcpManager, config, isService);
     }
     else
     {
@@ -131,7 +131,7 @@ static async Task RunAsConsoleAsync()
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, AgentConfig config)
+static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, AgentConfig config, bool isService)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n Starting web interface at {config.WebUrls}");
@@ -139,7 +139,13 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
 
     var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config);
 
-    if (config.LaunchBrowser)
+    // Only launch browser in development/local environment, never in service or production mode
+    var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Development";
+    var canLaunchBrowser = config.LaunchBrowser
+        && !isService
+        && string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
+
+    if (canLaunchBrowser)
     {
         try
         {

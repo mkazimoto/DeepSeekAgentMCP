@@ -30,14 +30,14 @@ public class SessionManager : IAsyncDisposable
     /// <summary>
     /// Processes a user message in the specified session and returns the agent's response.
     /// </summary>
-    public async Task<string> ProcessMessageAsync(string sessionId, string userMessage, CancellationToken cancellationToken = default)
+    public async Task<string> ProcessMessageAsync(string sessionId, string userMessage, string? clientIp = null, CancellationToken cancellationToken = default)
     {
         var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
         await sessionLock.WaitAsync(cancellationToken);
 
         try
         {
-            var state = GetOrCreateSession(sessionId);
+            var state = GetOrCreateSession(sessionId, clientIp);
 
             // Create a CancellationTokenSource linked to the caller's token
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -66,6 +66,7 @@ public class SessionManager : IAsyncDisposable
     public async Task<string> ProcessMessageStreamingAsync(
         string sessionId, string userMessage,
         Action<string>? onChunk = null,
+        string? clientIp = null,
         CancellationToken cancellationToken = default)
     {
         var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
@@ -73,7 +74,7 @@ public class SessionManager : IAsyncDisposable
 
         try
         {
-            var state = GetOrCreateSession(sessionId);
+            var state = GetOrCreateSession(sessionId, clientIp);
 
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _activeRequests[sessionId] = cts;
@@ -186,7 +187,26 @@ public class SessionManager : IAsyncDisposable
     /// </summary>
     public int ActiveSessionCount => _sessions.Count;
 
-    private SessionState GetOrCreateSession(string sessionId)
+    /// <summary>
+    /// Gets the number of sessions associated with a given client IP.
+    /// </summary>
+    public int GetSessionCountForIp(string clientIp)
+    {
+        if (string.IsNullOrEmpty(clientIp)) return 0;
+        return _sessions.Values.Count(s =>
+            !string.IsNullOrEmpty(s.ClientIp) &&
+            string.Equals(s.ClientIp, clientIp, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Checks whether a session with the given ID already exists.
+    /// </summary>
+    public bool SessionExists(string sessionId)
+    {
+        return _sessions.ContainsKey(sessionId);
+    }
+
+    private SessionState GetOrCreateSession(string sessionId, string? clientIp = null)
     {
         return _sessions.GetOrAdd(sessionId, id =>
         {
@@ -195,7 +215,8 @@ public class SessionManager : IAsyncDisposable
             {
                 Agent = new DeepSeekAgent(_deepSeekClient, _mcpToolManager),
                 CreatedAt = DateTime.UtcNow,
-                LastAccess = DateTime.UtcNow
+                LastAccess = DateTime.UtcNow,
+                ClientIp = clientIp
             };
         });
     }
@@ -289,5 +310,6 @@ public class SessionManager : IAsyncDisposable
         public DeepSeekAgent Agent { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
         public DateTime LastAccess { get; set; }
+        public string? ClientIp { get; set; }
     }
 }

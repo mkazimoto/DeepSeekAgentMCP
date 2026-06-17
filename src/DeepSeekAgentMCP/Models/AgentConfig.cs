@@ -27,15 +27,33 @@ public record AgentConfig
     /// <summary>Path to MCP servers config file</summary>
     public string McpServerConfigPath { get; init; } = "config/mcp-servers.json";
 
-    /// <summary>Whether the web server is enabled</summary>
+        /// <summary>Whether the web server is enabled</summary>
     public bool WebEnabled { get; init; } = true;
 
     /// <summary>Web server URLs</summary>
     public string WebUrls { get; init; } = "http://localhost:5000";
 
-    /// <summary>Whether to auto-launch browser</summary>
+    /// <summary>Auto-launch browser on start</summary>
     public bool LaunchBrowser { get; init; } = false;
 
-    /// <summary>Rate limit: max requests per minute per IP</summary>
+    /// <summary>Rate limit per IP per minute</summary>
     public int RateLimitPerMinute { get; init; } = 30;
+
+    /// <summary>Allowed CORS origins (empty = no CORS)</summary>
+    public List<string> AllowedCorsOrigins { get; init; } = [];
+
+    /// <summary>Requires authentication token for API access</summary>
+    public bool RequireAuth { get; init; } = false;
+
+    /// <summary>Authentication token for API access</summary>
+    public string? AuthToken { get; init; }
+
+    /// <summary>Whether HTTPS is enabled</summary>
+    public bool HttpsEnabled { get; init; } = false;
+
+    /// <summary>Path to HTTPS certificate file</summary>
+    public string? HttpsCertificatePath { get; init; }
+
+    /// <summary>Maximum active sessions per IP</summary>
+    public int MaxSessionsPerIp { get; init; } = 5;
 }
