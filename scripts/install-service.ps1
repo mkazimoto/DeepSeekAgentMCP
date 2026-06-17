@@ -186,6 +186,15 @@ Write-Host "  DeepSeek Agent MCP - Windows Service" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Mata o processo DeepSeekAgentMCP caso esteja executando (fora do serviço Windows)
+$process = Get-Process -Name "DeepSeekAgentMCP" -ErrorAction SilentlyContinue
+if ($process) {
+    Write-Info "Fechando processo DeepSeekAgentMCP em execução (PID: $($process.Id))..."
+    Stop-Process -Name "DeepSeekAgentMCP" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Write-Success "Processo DeepSeekAgentMCP encerrado."
+}
+
 switch ($Action) {
     "install"   { Install-Service }
     "uninstall" { Uninstall-Service }
