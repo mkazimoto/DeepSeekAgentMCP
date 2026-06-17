@@ -1064,7 +1064,7 @@ class ChatApp {
         this.applyTransform();
     }
 
-    // --- Diagram Export (SVG + PNG) ---
+    // --- Diagram Export (SVG) ---
     exportDiagramAsSvg(diagramId) {
         const wrapper = document.querySelector(`.mermaid-wrapper[data-diagram-id="${diagramId}"]`);
         if (!wrapper) return;
@@ -1078,7 +1078,7 @@ class ChatApp {
             return;
         }
 
-        this.showExportMenu(diagramId, svg);
+        this.downloadSvg(svg, `diagrama-${diagramId}.svg`);
     }
 
     exportFullscreenDiagram() {
@@ -1088,54 +1088,7 @@ class ChatApp {
             this.showToast('❌ Nenhum diagrama para exportar');
             return;
         }
-        this.showExportMenu(this._fullscreenDiagramId || 'exportado', svg);
-    }
-
-    showExportMenu(diagramId, svgElement) {
-        // Cria menu flutuante de opções de exportação
-        let menu = document.querySelector('.export-menu');
-        if (!menu) {
-            menu = document.createElement('div');
-            menu.className = 'export-menu';
-            menu.innerHTML = `
-                <div class="export-menu-item" data-export-format="svg">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Exportar como SVG
-                </div>
-                <div class="export-menu-item" data-export-format="png">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    Exportar como PNG
-                </div>
-            `;
-            menu.addEventListener('click', (e) => {
-                const item = e.target.closest('[data-export-format]');
-                if (!item) return;
-                const format = item.dataset.exportFormat;
-                if (format === 'svg') {
-                    this.downloadSvg(svgElement, `diagrama-${diagramId}.svg`);
-                } else if (format === 'png') {
-                    this.downloadPng(svgElement, `diagrama-${diagramId}.png`);
-                }
-                menu.remove();
-            });
-            document.body.appendChild(menu);
-
-            // Fecha ao clicar fora
-            setTimeout(() => {
-                document.addEventListener('click', (e) => {
-                    if (!menu.contains(e.target)) menu.remove();
-                }, { once: true });
-            }, 0);
-        }
-
-        // Posiciona o menu próximo ao botão
-        const btn = document.querySelector('[data-export-diagram], #mermaid-modal-export');
-        if (btn) {
-            const rect = btn.getBoundingClientRect();
-            menu.style.position = 'fixed';
-            menu.style.top = (rect.bottom + 4) + 'px';
-            menu.style.right = (window.innerWidth - rect.right) + 'px';
-        }
+        this.downloadSvg(svg, `diagrama-${this._fullscreenDiagramId || 'exportado'}.svg`);
     }
 
     downloadSvg(svgElement, filename) {
@@ -1179,71 +1132,6 @@ class ChatApp {
         URL.revokeObjectURL(url);
 
         this.showToast('✅ Diagrama exportado como SVG');
-    }
-
-    downloadPng(svgElement, filename) {
-        const clone = svgElement.cloneNode(true);
-
-        // Adiciona fundo preto
-        const viewBox = clone.getAttribute('viewBox') || '';
-        let width = clone.getAttribute('width') || '800';
-        let height = clone.getAttribute('height') || '600';
-        const vbParts = viewBox.split(/\s+/);
-        if (vbParts.length === 4) {
-            width = parseInt(vbParts[2]);
-            height = parseInt(vbParts[3]);
-        }
-
-        const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        bgRect.setAttribute('width', width);
-        bgRect.setAttribute('height', height);
-        bgRect.setAttribute('fill', '#000000');
-        bgRect.setAttribute('x', '0');
-        bgRect.setAttribute('y', '0');
-        clone.insertBefore(bgRect, clone.firstChild);
-
-        const styles = svgElement.querySelectorAll('style');
-        styles.forEach(s => clone.appendChild(s.cloneNode(true)));
-
-        const serializer = new XMLSerializer();
-        const svgString = serializer.serializeToString(clone);
-
-        // Cria blob SVG e converte para PNG via canvas
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
-
-        const scale = 2; // alta resolução (2x)
-        const canvas = document.createElement('canvas');
-        canvas.width = width * scale;
-        canvas.height = height * scale;
-        const ctx = canvas.getContext('2d');
-
-        const img = new Image();
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            URL.revokeObjectURL(url);
-
-            canvas.toBlob((pngBlob) => {
-                if (!pngBlob) {
-                    this.showToast('❌ Erro ao gerar PNG');
-                    return;
-                }
-                const pngUrl = URL.createObjectURL(pngBlob);
-                const link = document.createElement('a');
-                link.href = pngUrl;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(pngUrl);
-                this.showToast('✅ Diagrama exportado como PNG');
-            }, 'image/png');
-        };
-        img.onerror = () => {
-            URL.revokeObjectURL(url);
-            this.showToast('❌ Erro ao gerar PNG');
-        };
-        img.src = url;
     }
 
     escapeHtml(text) {
