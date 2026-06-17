@@ -157,59 +157,8 @@ public class DeepSeekAgentService : BackgroundService
             var app = builder.Build();
             app.UseStaticFiles();
 
-            // POST /api/chat — send a message
-            app.MapPost("/api/chat", async (ChatRequest request) =>
-            {
-                if (string.IsNullOrWhiteSpace(request.Message))
-                    return Results.BadRequest(new { error = "Message is required." });
-
-                try
-                {
-                    var sessionId = GetSessionId(request);
-                    var response = await sessionManager.ProcessMessageAsync(sessionId, request.Message, stoppingToken);
-                    return Results.Ok(new { response });
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error processing chat message");
-                    return Results.Json(new { error = ex.Message }, statusCode: 500);
-                }
-            });
-
-            // GET /api/status — MCP server status + connected servers
-            app.MapGet("/api/status", () =>
-            {
-                return Results.Ok(new
-                {
-                    model = model,
-                    activeSessions = sessionManager.ActiveSessionCount,
-                    mcpServers = mcpManager.GetServerStatusList()
-                });
-            });
-
-            // GET /api/history — conversation history for a session
-            app.MapGet("/api/history", (string? sessionId) =>
-            {
-                var sid = sessionId ?? "default";
-                var history = sessionManager.GetHistory(sid);
-                var messages = history.Select(m => new
-                {
-                    role = m.Role,
-                    content = m.Content,
-                    name = m.Name
-                });
-                return Results.Ok(new { history = messages });
-            });
-
-            // POST /api/clear — clear conversation for a session
-            app.MapPost("/api/clear", (ChatRequest request) =>
-            {
-                var sessionId = GetSessionId(request);
-                sessionManager.ClearConversation(sessionId);
-                return Results.Ok(new { success = true });
-            });
-
-            app.MapFallbackToFile("index.html");
+            // Register all agent API endpoints via shared extension method
+            app.MapAgentEndpoints(sessionManager, mcpManager, model, _logger);
 
             _logger.LogInformation("DeepSeek Agent Service started successfully. Active sessions: {Count}", sessionManager.ActiveSessionCount);
 
@@ -224,11 +173,6 @@ public class DeepSeekAgentService : BackgroundService
             _logger.LogError(ex, "Fatal error in DeepSeek Agent Service");
             throw;
         }
-    }
-
-    private static string GetSessionId(ChatRequest request)
-    {
-        return !string.IsNullOrWhiteSpace(request.SessionId) ? request.SessionId : "default";
     }
 
     private static string GetEnvDeepSeekApiKey()

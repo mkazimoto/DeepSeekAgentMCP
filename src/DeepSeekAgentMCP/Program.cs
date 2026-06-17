@@ -158,7 +158,7 @@ static async Task RunAsConsoleAsync()
     if (webEnabled)
     {
         var sessionManager = new SessionManager(deepSeekClient, mcpManager);
-        await RunWebServerAsync(sessionManager, mcpManager, webUrls ?? "http://localhost:5000", launchBrowser);
+        await RunWebServerAsync(sessionManager, mcpManager, model, webUrls ?? "http://localhost:5000", launchBrowser);
     }
     else
     {
@@ -169,7 +169,7 @@ static async Task RunAsConsoleAsync()
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, string urls, bool launchBrowser)
+static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, string model, string urls, bool launchBrowser)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n Starting web interface at {urls}");
@@ -195,66 +195,8 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
     var app = builder.Build();
     app.UseStaticFiles();
 
-    // POST /api/chat — send a message
-    app.MapPost("/api/chat", async (ChatRequest request) =>
-    {
-        if (string.IsNullOrWhiteSpace(request.Message))
-            return Results.BadRequest(new { error = "Message is required." });
-
-        try
-        {
-            var sessionId = GetSessionId(request);
-            var response = await sessionManager.ProcessMessageAsync(sessionId, request.Message);
-            return Results.Ok(new { response });
-        }
-        catch (Exception ex)
-        {
-            return Results.Json(new { error = ex.Message }, statusCode: 500);
-        }
-    });
-
-    // GET /api/status — MCP server status
-    app.MapGet("/api/status", () =>
-    {
-        return Results.Ok(new
-        {
-            model = "deepseek-v4-flash",
-            activeSessions = sessionManager.ActiveSessionCount,
-            mcpServers = mcpManager.GetServerStatusList()
-        });
-    });
-
-    // GET /api/history — conversation history for a session
-    app.MapGet("/api/history", (string? sessionId) =>
-    {
-        var sid = sessionId ?? "default";
-        var history = sessionManager.GetHistory(sid);
-        var messages = history.Select(m => new
-        {
-            role = m.Role,
-            content = m.Content,
-            name = m.Name
-        });
-        return Results.Ok(new { history = messages });
-    });
-
-    // POST /api/cancel — cancel an active request for a session
-    app.MapPost("/api/cancel", (ChatRequest request) =>
-    {
-        var sessionId = GetSessionId(request);
-        sessionManager.CancelRequest(sessionId);
-        return Results.Ok(new { success = true });
-    });
-
-    // POST /api/clear — clear conversation for a session
-    app.MapPost("/api/clear", (ChatRequest request) =>
-    {
-        var sessionId = GetSessionId(request);
-        sessionManager.ClearConversation(sessionId);
-        return Results.Ok(new { success = true });
-    });
-
-    app.MapFallbackToFile("index.html");
+    // Register all agent API endpoints via shared extension method
+    app.MapAgentEndpoints(sessionManager, mcpManager, model);
 
     if (launchBrowser)
     {
@@ -271,11 +213,6 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
     }
 
     await app.RunAsync();
-}
-
-static string GetSessionId(ChatRequest request)
-{
-    return !string.IsNullOrWhiteSpace(request.SessionId) ? request.SessionId : "default";
 }
 
 // ===================================================================

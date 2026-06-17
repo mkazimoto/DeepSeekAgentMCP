@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DeepSeekAgentMCP;
 
@@ -17,10 +18,11 @@ public class DeepSeekClient : IDisposable
     private readonly double _temperature;
     private readonly ThinkingConfig? _thinking;
     private readonly string? _reasoningEffort;
+    private readonly ILogger<DeepSeekClient>? _logger;
 
     private const string BaseUrl = "https://api.deepseek.com";
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null)
     {
         _apiKey = apiKey;
         _model = model;
@@ -28,6 +30,7 @@ public class DeepSeekClient : IDisposable
         _temperature = temperature;
         _thinking = thinking;
         _reasoningEffort = reasoningEffort;
+        _logger = logger;
 
         _httpClient = new HttpClient
         {
@@ -35,6 +38,9 @@ public class DeepSeekClient : IDisposable
             Timeout = TimeSpan.FromMinutes(5)
         };
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+
+        _logger?.LogInformation("DeepSeekClient initialized (model: {Model}, maxTokens: {MaxTokens}, temperature: {Temperature})",
+            model, maxTokens, temperature);
     }
 
     /// <summary>
@@ -65,6 +71,11 @@ public class DeepSeekClient : IDisposable
         var maxRetries = 3;
         var baseDelayMs = 1000;
 
+        var messageCount = messages.Count;
+        var toolCount = tools?.Count ?? 0;
+        _logger?.LogDebug("Sending chat request (model: {Model}, messages: {Count}, tools: {ToolCount})",
+            _model, messageCount, toolCount);
+
         for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -76,6 +87,11 @@ public class DeepSeekClient : IDisposable
                 if (response.IsSuccessStatusCode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<DeepSeekChatResponse>(cancellationToken: cancellationToken);
+                    if (result?.Usage != null)
+                    {
+                        _logger?.LogInformation("DeepSeek response OK (tokens: {PromptTokens} prompt + {CompletionTokens} completion = {TotalTokens} total)",
+                            result.Usage.PromptTokens, result.Usage.CompletionTokens, result.Usage.TotalTokens);
+                    }
                     return result ?? throw new InvalidOperationException("Failed to deserialize DeepSeek response.");
                 }
 
@@ -83,7 +99,8 @@ public class DeepSeekClient : IDisposable
                 if (attempt < maxRetries && ((int)response.StatusCode == 429 || (int)response.StatusCode >= 500))
                 {
                     var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
-                    Console.WriteLine($"[DeepSeek] Retry {attempt}/{maxRetries} after {(int)response.StatusCode} - waiting {delay.TotalMilliseconds}ms");
+                    _logger?.LogWarning("DeepSeek retry {Attempt}/{MaxRetries} after {StatusCode} - waiting {Delay}ms",
+                        attempt, maxRetries, (int)response.StatusCode, delay.TotalMilliseconds);
                     await Task.Delay(delay, cancellationToken);
                     continue;
                 }
@@ -94,11 +111,13 @@ public class DeepSeekClient : IDisposable
             catch (HttpRequestException ex) when (attempt < maxRetries)
             {
                 var delay = TimeSpan.FromMilliseconds(baseDelayMs * Math.Pow(2, attempt - 1));
-                Console.WriteLine($"[DeepSeek] Retry {attempt}/{maxRetries} after HttpRequestException: {ex.Message}");
+                _logger?.LogWarning(ex, "DeepSeek retry {Attempt}/{MaxRetries} after HttpRequestException - waiting {Delay}ms",
+                    attempt, maxRetries, delay.TotalMilliseconds);
                 await Task.Delay(delay, cancellationToken);
             }
         }
 
+        _logger?.LogError("Failed to get response from DeepSeek after {MaxRetries} retries", maxRetries);
         throw new HttpRequestException($"Failed to get response from DeepSeek after {maxRetries} retries.");
     }
 
@@ -125,6 +144,8 @@ public class DeepSeekClient : IDisposable
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
+        _logger?.LogDebug("Sending streaming chat request (model: {Model}, messages: {Count})", _model, messages.Count);
+
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/chat/completions")
         {
             Content = content
@@ -132,6 +153,7 @@ public class DeepSeekClient : IDisposable
 
         var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();
+        _logger?.LogInformation("DeepSeek streaming connection established");
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
