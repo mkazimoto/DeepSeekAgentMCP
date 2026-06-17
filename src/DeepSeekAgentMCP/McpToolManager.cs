@@ -229,7 +229,7 @@ public class McpToolManager : IAsyncDisposable
     /// Gets all discovered tools as DeepSeek-compatible tool definitions.
     /// Uses a cache with configurable TTL (default: 30s) to avoid recomputation.
     /// </summary>
-    public List<ToolDefinition> GetToolDefinitions(int cacheTtlSeconds = 30)
+    public virtual List<ToolDefinition> GetToolDefinitions(int cacheTtlSeconds = 30)
     {
         lock (_cacheLock)
         {
@@ -285,7 +285,7 @@ public class McpToolManager : IAsyncDisposable
     /// <summary>
     /// Executes an MCP tool call and returns the result as a string.
     /// </summary>
-    public async Task<string> ExecuteToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken = default)
+    public virtual async Task<string> ExecuteToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken = default)
     {
         var functionName = toolCall.Function.Name;
         List<McpClientWrapper> snapshot;

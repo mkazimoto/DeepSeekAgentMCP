@@ -47,7 +47,7 @@ public class DeepSeekClient : IDisposable
     /// <summary>
     /// Sends a chat completion request to DeepSeek (non-streaming) with retry on transient failures.
     /// </summary>
-    public async Task<DeepSeekChatResponse> SendChatAsync(
+    public virtual async Task<DeepSeekChatResponse> SendChatAsync(
         List<ChatMessage> messages,
         List<ToolDefinition>? tools = null,
         string? toolChoice = null,
