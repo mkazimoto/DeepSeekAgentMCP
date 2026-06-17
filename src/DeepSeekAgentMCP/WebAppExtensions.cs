@@ -24,6 +24,12 @@ public static class WebAppExtensions
             if (string.IsNullOrWhiteSpace(request.Message))
                 return Results.BadRequest(new { error = "Message is required." });
 
+            if (request.Message.Length > 10000)
+                return Results.BadRequest(new { error = "Message exceeds maximum length of 10000 characters." });
+
+            if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
+                return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
+
             try
             {
                 var sessionId = GetSessionId(request);
@@ -33,7 +39,7 @@ public static class WebAppExtensions
             catch (Exception ex)
             {
                 logger?.LogError(ex, "Error processing chat message");
-                return Results.Json(new { error = ex.Message }, statusCode: 500);
+                return Results.Json(new { error = "An internal error occurred processing your message." }, statusCode: 500);
             }
         });
 
@@ -65,6 +71,9 @@ public static class WebAppExtensions
         // POST /api/cancel — cancel an active request for a session
         app.MapPost("/api/cancel", (ChatRequest request) =>
         {
+            if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
+                return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
+
             var sessionId = GetSessionId(request);
             sessionManager.CancelRequest(sessionId);
             return Results.Ok(new { success = true });
@@ -73,6 +82,9 @@ public static class WebAppExtensions
         // POST /api/clear — clear conversation for a session
         app.MapPost("/api/clear", (ChatRequest request) =>
         {
+            if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
+                return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
+
             var sessionId = GetSessionId(request);
             sessionManager.ClearConversation(sessionId);
             return Results.Ok(new { success = true });

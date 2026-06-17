@@ -25,14 +25,7 @@ public class DeepSeekAgentService : BackgroundService
         try
         {
             // --- Configuration ---
-            // Try published mode first (config next to executable), then development mode
-            var configPaths = new[]
-            {
-                Path.Combine(AppContext.BaseDirectory, "config", "appsettings.json"),
-                Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "config", "appsettings.json"))
-            };
-
-            var configPath = configPaths.FirstOrDefault(File.Exists) ?? string.Empty;
+            var configPath = PathHelper.FindConfigPath();
 
             string apiKey;
             string model;
@@ -95,21 +88,7 @@ public class DeepSeekAgentService : BackgroundService
             }
 
             // --- Initialize Agent ---
-            // MCP config path: try next to config file first, then relative to project root
-            var configDir = Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory;
-            var mcpConfigFullPath = Path.Combine(configDir, "mcp-servers.json");
-
-            if (!File.Exists(mcpConfigFullPath))
-            {
-                var mcpConfigRelPath = "config/mcp-servers.json";
-                if (File.Exists(configPath))
-                {
-                    using var doc2 = JsonDocument.Parse(await File.ReadAllTextAsync(configPath, stoppingToken));
-                    mcpConfigRelPath = doc2.RootElement.GetProperty("McpServerConfigPath").GetString() ?? "config/mcp-servers.json";
-                }
-                var projectRoot = Path.GetDirectoryName(Path.GetDirectoryName(configPath)) ?? Directory.GetCurrentDirectory();
-                mcpConfigFullPath = Path.GetFullPath(Path.Combine(projectRoot, mcpConfigRelPath));
-            }
+            var mcpConfigFullPath = PathHelper.FindMcpConfigPath(configPath);
 
             var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature, thinkingConfig, reasoningEffort);
             var mcpManager = new McpToolManager(mcpConfigFullPath);
@@ -122,15 +101,7 @@ public class DeepSeekAgentService : BackgroundService
             // --- Start Web Server ---
             _logger.LogInformation("Starting web interface at {Urls}", webUrls);
 
-            // Content root is the base directory (where config/ and wwwroot/ live)
-            var contentRoot = Path.GetFullPath(AppContext.BaseDirectory);
-            // In development, content root is the project root
-            if (!Directory.Exists(Path.Combine(contentRoot, "wwwroot")))
-            {
-                var devPath = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", ".."));
-                if (Directory.Exists(Path.Combine(devPath, "wwwroot")))
-                    contentRoot = devPath;
-            }
+            var contentRoot = PathHelper.FindContentRoot();
 
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {

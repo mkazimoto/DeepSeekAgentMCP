@@ -12,40 +12,24 @@ public static class SkillLoader
 
     static SkillLoader()
     {
-        // Tenta localizar o diretório Skills em modo desenvolvimento ou publicado
-        var searchPaths = new[]
-        {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Skills")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Skills"))
-        };
-
-        _baseDirectory = searchPaths.FirstOrDefault(Directory.Exists);
+        _baseDirectory = PathHelper.FindSkillsDirectory();
     }
 
     /// <summary>
     /// Carrega o arquivo instructions.md que contém as instruções base do sistema.
-    /// Procura no diretório de saída ou no diretório do projeto (modo dev).
     /// </summary>
     public static string LoadInstructions()
     {
-        var searchPaths = new[]
+        var path = PathHelper.FindInstructionsFile();
+        if (path != null)
         {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "instructions.md")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "instructions.md"))
-        };
-
-        foreach (var path in searchPaths)
-        {
-            if (File.Exists(path))
+            try
             {
-                try
-                {
-                    return File.ReadAllText(path).Trim();
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[SkillLoader] Error loading {path}: {ex.Message}");
-                }
+                return File.ReadAllText(path).Trim();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[SkillLoader] Error loading {path}: {ex.Message}");
             }
         }
 
@@ -61,7 +45,8 @@ public static class SkillLoader
         if (_baseDirectory == null)
             return string.Empty;
 
-        var skillFiles = Directory.GetFiles(_baseDirectory, "*.md");
+        // Only top-level .md files — ignora subdiretórios para evitar Skills/Skills/ duplicado
+        var skillFiles = Directory.GetFiles(_baseDirectory, "*.md", SearchOption.TopDirectoryOnly);
         if (skillFiles.Length == 0)
             return string.Empty;
 

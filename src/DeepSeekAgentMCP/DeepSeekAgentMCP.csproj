@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <Content Include="..\..\config\**" CopyToOutputDirectory="PreserveNewest" LinkBase="config\" />
-    <Content Include="Skills\**" CopyToOutputDirectory="PreserveNewest" LinkBase="Skills\" />
+    <Content Include="Skills\*.md" CopyToOutputDirectory="PreserveNewest" LinkBase="Skills\" />
     <Content Include="instructions.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

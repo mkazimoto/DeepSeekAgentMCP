@@ -67,8 +67,7 @@ static async Task RunAsConsoleAsync()
     Console.WriteLine("=== DeepSeek Agent with MCP Support ===\n");
 
     // --- Configuration ---
-    var configPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "config", "appsettings.json");
-    configPath = Path.GetFullPath(configPath);
+    var configPath = PathHelper.FindConfigPath();
 
     string apiKey;
     string model;
@@ -135,15 +134,7 @@ static async Task RunAsConsoleAsync()
     }
 
     // --- Initialize Agent ---
-    var mcpConfigRelPath = "config/mcp-servers.json";
-    if (File.Exists(configPath))
-    {
-        using var doc2 = JsonDocument.Parse(await File.ReadAllTextAsync(configPath));
-        mcpConfigRelPath = doc2.RootElement.GetProperty("McpServerConfigPath").GetString() ?? "config/mcp-servers.json";
-    }
-
-    var projectRoot = Path.GetDirectoryName(Path.GetDirectoryName(configPath)) ?? Directory.GetCurrentDirectory();
-    var mcpConfigFullPath = Path.GetFullPath(Path.Combine(projectRoot, mcpConfigRelPath));
+    var mcpConfigFullPath = PathHelper.FindMcpConfigPath(configPath);
 
     var deepSeekClient = new DeepSeekClient(apiKey, model, maxTokens, temperature);
     var mcpManager = new McpToolManager(mcpConfigFullPath);
@@ -175,14 +166,7 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
     Console.WriteLine($"\n Starting web interface at {urls}");
     Console.ResetColor();
 
-    // Content root is the base directory (where config/ and wwwroot/ live)
-    var contentRoot = Path.GetFullPath(AppContext.BaseDirectory);
-    if (!Directory.Exists(Path.Combine(contentRoot, "wwwroot")))
-    {
-        var devPath = Path.GetFullPath(Path.Combine(contentRoot, "..", "..", ".."));
-        if (Directory.Exists(Path.Combine(devPath, "wwwroot")))
-            contentRoot = devPath;
-    }
+    var contentRoot = PathHelper.FindContentRoot();
 
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     {
