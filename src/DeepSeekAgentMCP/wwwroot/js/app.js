@@ -82,25 +82,44 @@ class ChatApp {
         if (sidebarFooter && data.name) {
             const userInfoEl = document.createElement('div');
             userInfoEl.className = 'user-info';
-            userInfoEl.innerHTML = `
-                <div class="user-info-avatar">
-                    ${data.picture
-                        ? `<img src="${data.picture}" alt="${this.escapeHtml(data.name)}" onerror="this.outerHTML='<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg>'" />`
-                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
-                    }
-                </div>
-                <div class="user-info-details">
-                    <span class="user-info-name">${this.escapeHtml(data.name)}</span>
-                    <button class="user-info-logout" id="logout-btn">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                            <polyline points="16 17 21 12 16 7"/>
-                            <line x1="21" y1="12" x2="9" y2="12"/>
-                        </svg>
-                        Sair
-                    </button>
-                </div>
+
+            // Avatar container
+            const avatar = document.createElement('div');
+            avatar.className = 'user-info-avatar';
+
+            const personIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+            if (data.picture) {
+                const img = document.createElement('img');
+                img.src = data.picture;
+                img.alt = this.escapeHtml(data.name);
+                img.onerror = function () {
+                    this.outerHTML = personIcon;
+                };
+                avatar.appendChild(img);
+            } else {
+                avatar.innerHTML = personIcon;
+            }
+
+            userInfoEl.appendChild(avatar);
+
+            // Details
+            const details = document.createElement('div');
+            details.className = 'user-info-details';
+            details.innerHTML = `
+                <span class="user-info-name">${this.escapeHtml(data.name)}</span>
+                <button class="user-info-logout" id="logout-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    Sair
+                </button>
             `;
+
+            userInfoEl.appendChild(details);
+
             // Remove existing user-info if any
             const existing = sidebarFooter.querySelector('.user-info');
             if (existing) existing.remove();
