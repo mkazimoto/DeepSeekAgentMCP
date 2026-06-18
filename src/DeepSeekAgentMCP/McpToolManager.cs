@@ -62,6 +62,7 @@ public class McpToolManager : IAsyncDisposable
     private readonly int _maxConsecutiveFailures = 3;
     private readonly TimeSpan _healthCheckInterval = TimeSpan.FromMinutes(2);
     private bool _disposed;
+    private CancellationTokenSource? _shutdownCts;
 
     // Cached tool definitions with TTL
     private List<ToolDefinition>? _cachedToolDefinitions;
@@ -122,7 +123,9 @@ public class McpToolManager : IAsyncDisposable
 
                 if (serverConfig.Headers is { Count: > 0 })
                 {
-                    httpOptions.AdditionalHeaders = new Dictionary<string, string>(serverConfig.Headers);
+                    httpOptions.AdditionalHeaders = serverConfig.Headers
+                        .Select(h => new KeyValuePair<string, string>(h.Key, ResolveEnvVars(h.Value)))
+                        .ToDictionary();
                 }
 
                 transport = new HttpClientTransport(httpOptions);
@@ -168,8 +171,13 @@ public class McpToolManager : IAsyncDisposable
     /// </summary>
     private void StartHealthCheckLoop()
     {
+        _shutdownCts = new CancellationTokenSource();
+        var shutdownToken = _shutdownCts.Token;
+
         _healthCheckTimer = new Timer(async _ =>
         {
+            if (shutdownToken.IsCancellationRequested) return;
+
             List<McpClientWrapper> snapshot;
             lock (_clientsLock)
             {
@@ -406,6 +414,13 @@ public class McpToolManager : IAsyncDisposable
         if (_disposed) return;
         _disposed = true;
 
+        // Signal shutdown first so the health check callback stops immediately
+        if (_shutdownCts != null)
+        {
+            _shutdownCts.Cancel();
+            _shutdownCts.Dispose();
+        }
+
         _healthCheckTimer?.Dispose();
 
         List<McpClientWrapper> snapshot;
@@ -429,6 +444,43 @@ public class McpToolManager : IAsyncDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Resolves ${VAR_NAME} patterns in a string using environment variables
+    /// or Windows Registry fallback (HKLM\SOFTWARE\DeepSeekAgentMCP\{VAR_NAME}).
+    /// Unset variables are replaced with an empty string.
+    /// </summary>
+    private static string ResolveEnvVars(string value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.Contains("${")) return value;
+
+        return System.Text.RegularExpressions.Regex.Replace(value, @"\$\{(\w+)\}", match =>
+        {
+            var varName = match.Groups[1].Value;
+
+            // 1. Try environment variable
+            var envValue = Environment.GetEnvironmentVariable(varName);
+            if (!string.IsNullOrEmpty(envValue)) return envValue;
+
+            // 2. Fallback: Windows Registry
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                        $@"SOFTWARE\DeepSeekAgentMCP");
+                    if (key?.GetValue(varName) is string regValue && !string.IsNullOrEmpty(regValue))
+                        return regValue;
+                }
+                catch
+                {
+                    // Ignore registry errors
+                }
+            }
+
+            return string.Empty;
+        });
     }
 
     /// <summary>

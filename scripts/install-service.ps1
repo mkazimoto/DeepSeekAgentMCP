@@ -23,7 +23,8 @@ param(
     [string]$ServiceName = "DeepSeekAgentMCP",
     [string]$ServiceDependency = "",
     [string]$GoogleClientId = "",
-    [string]$GoogleClientSecret = ""
+    [string]$GoogleClientSecret = "",
+    [string]$McpServerToken = ""
 )
 
 $DisplayName = "DeepSeek Agent MCP Service"
@@ -145,10 +146,21 @@ function Install-Service {
     $envVars = @()
     if ($GoogleClientId) { $envVars += "GOOGLE_CLIENT_ID=$GoogleClientId" }
     if ($GoogleClientSecret) { $envVars += "GOOGLE_CLIENT_SECRET=$GoogleClientSecret" }
+    if ($McpServerToken) { $envVars += "MCP_SERVER_TOKEN=$McpServerToken" }
     if ($envVars.Count -gt 0) {
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
         Set-ItemProperty -Path $regPath -Name "Environment" -Value $envVars -Type MultiString
         Write-Success "Variáveis de ambiente configuradas para o serviço."
+    }
+
+    # Also write variables to HKLM\SOFTWARE\DeepSeekAgentMCP as registry fallback
+    $softwareRegPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
+    if (-not (Test-Path $softwareRegPath)) {
+        New-Item -Path $softwareRegPath -Force | Out-Null
+    }
+    if ($McpServerToken) {
+        Set-ItemProperty -Path $softwareRegPath -Name "MCP_SERVER_TOKEN" -Value $McpServerToken -Type String
+        Write-Success "MCP_SERVER_TOKEN registrado em $softwareRegPath"
     }
 
     Write-Success "Serviço criado com sucesso."

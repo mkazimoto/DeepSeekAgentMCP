@@ -11,8 +11,11 @@
 - **Streaming** — Respostas em tempo real com streaming
 - **Histórico de conversação** — Mantém contexto entre mensagens
 - **Interface Web** — Chat interativo via navegador com API REST
-- **Autenticação Google OAuth** — Login com conta Google na interface web
-- **Windows Service** — Execução como serviço do Windows em segundo plano
+- 🔐 **Autenticação Google OAuth** — Login com conta Google na interface web (desabilitado por padrão)
+- 🖥️ **Windows Service** — Execução como serviço do Windows em segundo plano
+- 🛡️ **Health check com auto-reconnect** — Reconexão automática a servidores MCP com falha
+- ⚡ **HttpClient pooling** — HttpClient reutilizável via construtor para evitar socket exhaustion
+- 🔑 **Resolução de variáveis via ambiente/registro** — Tokens lidos de env vars ou Registro Windows
 
 ## 🚀 Como usar
 
@@ -44,14 +47,24 @@ export DEEPSEEK_API_KEY="sua-chave-aqui"
 
 ### 1.1. Configurar Google OAuth (opcional)
 
-A interface web suporta login com Google. As credenciais **devem** ser configuradas via variáveis de ambiente (fonte primária):
+A interface web suporta login com Google. O Google Auth está **desabilitado por padrão** (`"Enabled": false` no `appsettings.json`).
+
+Para habilitar, edite `config/appsettings.json`:
+```json
+"GoogleAuth": {
+  "Enabled": true,
+  "Scopes": ["openid", "profile", "email"]
+}
+```
+
+As credenciais **devem** ser configuradas via variáveis de ambiente (fonte primária):
 
 ```powershell
 $env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
 $env:GOOGLE_CLIENT_SECRET = "seu-client-secret"
 ```
 
-> O sistema busca as credenciais primeiro nas variáveis de ambiente `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Se não estiverem definidas, faz fallback para os valores em `config/appsettings.json`. Para habilitar o Google Auth, mantenha `"Enabled": true` na seção `GoogleAuth` do `config/appsettings.json`.
+> O sistema busca as credenciais primeiro nas variáveis de ambiente `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Se não estiverem definidas, faz fallback para os valores em `config/appsettings.json`.
 
 #### Configurar no Windows Service
 
@@ -74,11 +87,34 @@ Set-ItemProperty -Path $regPath -Name "Environment" -Value @(
 Restart-Service -Name DeepSeekAgentMCP
 ```
 
+### 1.2. Configurar Token do Servidor MCP
+
+Se o servidor MCP utilizar autenticação via token (`Authorization: Bearer`), configure-o **fora do versionamento**:
+
+#### Modo Console
+```powershell
+$env:MCP_SERVER_TOKEN = "seu-token-aqui"
+dotnet run --project src/DeepSeekAgentMCP
+```
+
+#### Windows Service
+```powershell
+.\scripts\install-service.ps1 -Action install -McpServerToken "seu-token-aqui"
+```
+
+#### Registro Windows (fallback)
+O valor também pode ser registrado diretamente em:
+```
+HKLM\SOFTWARE\DeepSeekAgentMCP\MCP_SERVER_TOKEN
+```
+
+> O `config/mcp-servers.json` versionado contém o placeholder `${MCP_SERVER_TOKEN}`, que é resolvido automaticamente em tempo de execução: **variável de ambiente → Registro Windows → vazio**.
+
 ### 2. Configurar Servidores MCP
 
 Edite o arquivo `config/mcp-servers.json` para adicionar os servidores MCP desejados.
 
-> Servidores MCP são configurados em `config/mcp-servers.json`. Consulte a documentação de cada servidor para específica.
+> Consulte o template em `config/mcp-servers.template.json` para a estrutura esperada. Tokens e credenciais sensíveis devem usar `${VARIAVEL}` — o `McpToolManager` os resolve via ambiente/registro.
 
 ### 3. Executar
 
@@ -107,14 +143,14 @@ dotnet test
 dotnet test --logger "console;verbosity=detailed"
 ```
 
-O projeto inclui testes unitários para:
+O projeto inclui **60 testes unitários** para:
 - **DeepSeekAgent** — Orquestração de chamadas e tratamento de respostas
 - **DeepSeekClient** — Chamadas HTTP à API DeepSeek (com fake client)
-- **InputSanitizer** — Sanitização de entrada, prevenção de prompt injection e XSS
-- **McpToolManager** — Gerenciamento de servidores MCP (com fake manager)
+- **InputSanitizer** — Sanitização de entrada, prevenção de prompt injection e XSS (9 testes)
+- **McpToolManager** — Gerenciamento de servidores MCP, cache e serialização
 - **PathHelper** — Descoberta de caminhos em cenários de desenvolvimento e publicação
 - **RateLimiter** — Sliding window rate limiting, limites por chave, reset
-- **SessionManager** — Gerenciamento de sessões de conversa
+- **SessionManager** — Gerenciamento de sessões de conversa (12 testes)
 
 ## �🧩 Adicionar Novos Servidores MCP
 
@@ -198,7 +234,8 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 # Instalar o serviço com Google OAuth
 .\scripts\install-service.ps1 -Action install `
     -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
-    -GoogleClientSecret "seu-client-secret"
+    -GoogleClientSecret "seu-client-secret" `
+    -McpServerToken "seu-token-aqui"
 
 # Verificar status
 .\scripts\install-service.ps1 -Action status
@@ -210,9 +247,10 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 O script:
 1. Compila o projeto em modo **Release** com `dotnet publish --self-contained`
 2. Cria o serviço Windows com nome `DeepSeekAgentMCP`
-3. Configura as variáveis de ambiente do Google OAuth no registro do serviço (se fornecidas)
-4. Configura inicialização automática
-5. Inicia o serviço automaticamente
+3. Configura as variáveis de ambiente (Google OAuth, MCP Server Token) no registro do serviço
+4. Registra o `MCP_SERVER_TOKEN` também em `HKLM\SOFTWARE\DeepSeekAgentMCP` (fallback)
+5. Configura inicialização automática
+6. Inicia o serviço automaticamente
 
 ### Gerenciamento manual
 

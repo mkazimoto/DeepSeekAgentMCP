@@ -33,7 +33,17 @@ public static class AgentHostBuilder
 
         var configJson = await File.ReadAllTextAsync(configPath);
         using var doc = JsonDocument.Parse(configJson);
-        var deepSeekConfig = doc.RootElement.GetProperty("DeepSeek");
+
+        if (!doc.RootElement.TryGetProperty("DeepSeek", out var deepSeekConfig))
+        {
+            return new AgentConfig
+            {
+                ApiKey = ResolveApiKey(string.Empty),
+                Model = Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-v4-flash",
+                MaxTokens = 4096,
+                Temperature = 0.7
+            };
+        }
 
         var apiKey = deepSeekConfig.TryGetProperty("ApiKey", out var apiKeyProp)
             ? apiKeyProp.GetString() ?? string.Empty

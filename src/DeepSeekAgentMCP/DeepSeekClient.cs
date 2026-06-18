@@ -13,6 +13,7 @@ namespace DeepSeekAgentMCP;
 public class DeepSeekClient : IDisposable
 {
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
     private readonly string _apiKey;
     private readonly string _model;
     private readonly int _maxTokens;
@@ -23,7 +24,7 @@ public class DeepSeekClient : IDisposable
 
     private const string BaseUrl = "https://api.deepseek.com";
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300, HttpClient? httpClient = null)
     {
         _apiKey = apiKey;
         _model = model;
@@ -33,12 +34,21 @@ public class DeepSeekClient : IDisposable
         _reasoningEffort = reasoningEffort;
         _logger = logger;
 
-        _httpClient = new HttpClient
+        if (httpClient != null)
         {
-            BaseAddress = new Uri(BaseUrl),
-            Timeout = TimeSpan.FromSeconds(httpClientTimeoutSeconds)
-        };
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+            _httpClient = httpClient;
+            _ownsHttpClient = false;
+        }
+        else
+        {
+            _httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(BaseUrl),
+                Timeout = TimeSpan.FromSeconds(httpClientTimeoutSeconds)
+            };
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+            _ownsHttpClient = true;
+        }
 
         _logger?.LogInformation("DeepSeekClient initialized (model: {Model}, maxTokens: {MaxTokens}, temperature: {Temperature}, timeout: {Timeout}s)",
             model, maxTokens, temperature, httpClientTimeoutSeconds);
@@ -214,7 +224,8 @@ public class DeepSeekClient : IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
+        if (_ownsHttpClient)
+            _httpClient.Dispose();
     }
 }
 
