@@ -31,7 +31,8 @@ WITH CTE_RECURSIVO AS (
         MTAREFA T (NOLOCK)
     WHERE T.CODCOLIGADA = 1
       AND T.IDPRJ = 2
-      AND T.IDTRF = 126    
+      AND T.IDTRF = 126  
+      AND T.TIPOPLANILHA = 0  -- 0 - Planilha de Atividades, 1 - Planilha de Serviços
 
     UNION ALL
 
