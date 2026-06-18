@@ -21,7 +21,9 @@ param(
     [ValidateSet("install", "uninstall", "status")]
     [string]$Action = "install",
     [string]$ServiceName = "DeepSeekAgentMCP",
-    [string]$ServiceDependency = ""
+    [string]$ServiceDependency = "",
+    [string]$GoogleClientId = "",
+    [string]$GoogleClientSecret = ""
 )
 
 $DisplayName = "DeepSeek Agent MCP Service"
@@ -138,6 +140,16 @@ function Install-Service {
 
     # Set description
     & sc.exe description $ServiceName $Description 2>&1 | Out-Null
+
+    # Configure environment variables for the service
+    $envVars = @()
+    if ($GoogleClientId) { $envVars += "GOOGLE_CLIENT_ID=$GoogleClientId" }
+    if ($GoogleClientSecret) { $envVars += "GOOGLE_CLIENT_SECRET=$GoogleClientSecret" }
+    if ($envVars.Count -gt 0) {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+        Set-ItemProperty -Path $regPath -Name "Environment" -Value $envVars -Type MultiString
+        Write-Success "Variáveis de ambiente configuradas para o serviço."
+    }
 
     Write-Success "Serviço criado com sucesso."
     Write-Info "Iniciando serviço..."

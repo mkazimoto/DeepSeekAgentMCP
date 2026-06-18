@@ -127,19 +127,14 @@ public static class AgentHostBuilder
             var googleEnabled = googleAuthProp.TryGetProperty("Enabled", out var gaEnabledProp) && gaEnabledProp.GetBoolean();
             if (googleEnabled)
             {
-                var clientId = googleAuthProp.TryGetProperty("ClientId", out var clientIdProp)
-                    ? clientIdProp.GetString() ?? string.Empty
-                    : string.Empty;
-                var clientSecret = googleAuthProp.TryGetProperty("ClientSecret", out var clientSecretProp)
-                    ? clientSecretProp.GetString() ?? string.Empty
-                    : string.Empty;
-                // Env vars take precedence over config file
-                var envClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
-                if (!string.IsNullOrWhiteSpace(envClientId))
-                    clientId = envClientId;
-                var envClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
-                if (!string.IsNullOrWhiteSpace(envClientSecret))
-                    clientSecret = envClientSecret;
+                // Environment variables are the primary source
+                var clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
+                var clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
+                // Fallback to config file if env vars are not set
+                if (string.IsNullOrWhiteSpace(clientId) && googleAuthProp.TryGetProperty("ClientId", out var clientIdProp))
+                    clientId = clientIdProp.GetString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(clientSecret) && googleAuthProp.TryGetProperty("ClientSecret", out var clientSecretProp))
+                    clientSecret = clientSecretProp.GetString() ?? string.Empty;
 
                 var scopes = new List<string> { "openid", "profile", "email" };
                 if (googleAuthProp.TryGetProperty("Scopes", out var scopesProp))

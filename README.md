@@ -44,14 +44,35 @@ export DEEPSEEK_API_KEY="sua-chave-aqui"
 
 ### 1.1. Configurar Google OAuth (opcional)
 
-A interface web suporta login com Google. As credenciais **não devem** ser colocadas diretamente no `config/appsettings.json`. Configure por variáveis de ambiente:
+A interface web suporta login com Google. As credenciais **devem** ser configuradas via variáveis de ambiente (fonte primária):
 
 ```powershell
 $env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
 $env:GOOGLE_CLIENT_SECRET = "seu-client-secret"
 ```
 
-> O Client Secret pode ser definido em `appsettings.json` e sobrescrito pela env var `GOOGLE_CLIENT_SECRET`. O Client ID também pode ser definido em `appsettings.json` e sobrescrito pela env var `GOOGLE_CLIENT_ID`. Para habilitar o Google Auth, defina `"Enabled": true` na seção `GoogleAuth` do `config/appsettings.json`.
+> O sistema busca as credenciais primeiro nas variáveis de ambiente `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Se não estiverem definidas, faz fallback para os valores em `config/appsettings.json`. Para habilitar o Google Auth, mantenha `"Enabled": true` na seção `GoogleAuth` do `config/appsettings.json`.
+
+#### Configurar no Windows Service
+
+Ao instalar como serviço Windows, passe as credenciais como parâmetros:
+
+```powershell
+.\scripts\install-service.ps1 -Action install `
+    -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
+    -GoogleClientSecret "seu-client-secret"
+```
+
+Ou configure manualmente no registro:
+
+```powershell
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DeepSeekAgentMCP"
+Set-ItemProperty -Path $regPath -Name "Environment" -Value @(
+    "GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com",
+    "GOOGLE_CLIENT_SECRET=seu-client-secret"
+) -Type MultiString
+Restart-Service -Name DeepSeekAgentMCP
+```
 
 ### 2. Configurar Servidores MCP
 
@@ -171,8 +192,13 @@ O agente pode ser executado como um **Serviço Windows**, rodando em segundo pla
 Execute o PowerShell como **Administrador** e use o script de instalação:
 
 ```powershell
-# Instalar o serviço
+# Instalar o serviço (sem Google OAuth)
 .\scripts\install-service.ps1 -Action install
+
+# Instalar o serviço com Google OAuth
+.\scripts\install-service.ps1 -Action install `
+    -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
+    -GoogleClientSecret "seu-client-secret"
 
 # Verificar status
 .\scripts\install-service.ps1 -Action status
@@ -184,8 +210,9 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 O script:
 1. Compila o projeto em modo **Release** com `dotnet publish --self-contained`
 2. Cria o serviço Windows com nome `DeepSeekAgentMCP`
-3. Configura inicialização automática
-4. Inicia o serviço automaticamente
+3. Configura as variáveis de ambiente do Google OAuth no registro do serviço (se fornecidas)
+4. Configura inicialização automática
+5. Inicia o serviço automaticamente
 
 ### Gerenciamento manual
 
