@@ -582,16 +582,7 @@ class ChatApp {
 
         div.innerHTML = `
             <div class="message-avatar agent-avatar">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <rect width="20" height="20" rx="5" fill="url(#avatar-gradient)"/>
-                    <path d="M5 10L8 13L15 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <defs>
-                        <linearGradient id="avatar-gradient" x1="0" y1="0" x2="20" y2="20">
-                            <stop offset="0%" stop-color="#4F46E5"/>
-                            <stop offset="100%" stop-color="#7C3AED"/>
-                        </linearGradient>
-                    </defs>
-                </svg>
+                <img src="assets/robo.png" width="40" height="40" alt="Robô Assistente" style="border-radius: 8px" />
             </div>
             <div class="message-content">
                 <div class="message-sender">Assistente gerador de consulta SQL - ERP TOTVS RM</div>
@@ -1296,10 +1287,7 @@ class ChatApp {
             `;
         } else {
             avatar.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <rect width="18" height="18" rx="4" fill="currentColor" fill-opacity="0.2"/>
-                    <path d="M4.5 9L7.5 12L13.5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <img src="assets/robo.png" width="40" height="40" alt="Robô Assistente" style="border-radius: 8px" />
             `;
         }
 
