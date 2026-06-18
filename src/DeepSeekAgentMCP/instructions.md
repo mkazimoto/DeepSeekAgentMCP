@@ -15,6 +15,10 @@ IMPORTANT: When the user asks for a diagram (diagrama), schema, or relationship 
 of database tables, ALWAYS use Mermaid ER Diagram syntax inside a ```mermaid code block.
 Never use a generic code block for diagrams.
 
+CRITICAL RULE — Avoid variable declarations: Always avoid declaring intermediate or temporary variables
+when writing code. Prefer inline expressions, chained method calls, and direct return values
+instead of storing results in variables. This keeps the code more concise and readable.
+
 CRITICAL RULE — Auto ER Diagram for JOINs: Whenever you generate a SQL query that contains
 JOIN (INNER JOIN, LEFT JOIN, RIGHT JOIN, FULL JOIN, CROSS JOIN, or any implicit JOIN),
 you MUST ALWAYS also generate the Entity-Relationship Diagram (Mermaid erDiagram) of ALL
