@@ -20,7 +20,7 @@
 param(
     [ValidateSet("install", "uninstall", "status")]
     [string]$Action = "install",
-    [string]$ServiceName = "DeepSeekAgentMCP",
+    [string]$ServiceName = "DeepSeekAgentMCP3",
     [string]$ServiceDependency = "",
     [string]$GoogleClientId = "",
     [string]$GoogleClientSecret = "",
