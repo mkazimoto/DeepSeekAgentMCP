@@ -240,12 +240,19 @@ public static class WebAppExtensions
                 var user = httpContext.User;
                 if (user.Identity?.IsAuthenticated == true)
                 {
+                    // Tentar múltiplos claim types para picture (o Google pode usar diferentes
+                    // claim types dependendo da versão do ASP.NET Core / Google handler)
+                    var pictureClaim = user.FindFirst("picture")?.Value
+                        ?? user.FindFirst("urn:google:picture")?.Value
+                        ?? user.FindFirst("urn:google:image")?.Value
+                        ?? user.FindFirst("image")?.Value;
+
                     return Results.Ok(new
                     {
                         authenticated = true,
                         name = user.FindFirst(ClaimTypes.Name)?.Value,
                         email = user.FindFirst(ClaimTypes.Email)?.Value,
-                        picture = user.FindFirst("picture")?.Value
+                        picture = pictureClaim
                     });
                 }
 
