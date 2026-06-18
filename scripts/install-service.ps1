@@ -24,7 +24,8 @@ param(
     [string]$ServiceDependency = "",
     [string]$GoogleClientId = "",
     [string]$GoogleClientSecret = "",
-    [string]$McpServerToken = ""
+    [string]$McpServerToken = "",
+    [string]$DeepSeekApiKey = ""
 )
 
 $DisplayName = "DeepSeek Agent MCP Service"
@@ -161,6 +162,18 @@ function Install-Service {
     if ($McpServerToken) {
         Set-ItemProperty -Path $softwareRegPath -Name "MCP_SERVER_TOKEN" -Value $McpServerToken -Type String
         Write-Success "MCP_SERVER_TOKEN registrado em $softwareRegPath"
+    }
+    if ($DeepSeekApiKey) {
+        Set-ItemProperty -Path $softwareRegPath -Name "DEEPSEEK_API_KEY" -Value $DeepSeekApiKey -Type String
+        Write-Success "DEEPSEEK_API_KEY registrado em $softwareRegPath"
+    }
+    if ($GoogleClientId) {
+        Set-ItemProperty -Path $softwareRegPath -Name "GOOGLE_CLIENT_ID" -Value $GoogleClientId -Type String
+        Write-Success "GOOGLE_CLIENT_ID registrado em $softwareRegPath"
+    }
+    if ($GoogleClientSecret) {
+        Set-ItemProperty -Path $softwareRegPath -Name "GOOGLE_CLIENT_SECRET" -Value $GoogleClientSecret -Type String
+        Write-Success "GOOGLE_CLIENT_SECRET registrado em $softwareRegPath"
     }
 
     Write-Success "Serviço criado com sucesso."

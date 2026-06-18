@@ -137,10 +137,25 @@ public static class AgentHostBuilder
             var googleEnabled = googleAuthProp.TryGetProperty("Enabled", out var gaEnabledProp) && gaEnabledProp.GetBoolean();
             if (googleEnabled)
             {
-                // Environment variables are the primary source
+                // Priority 1: Environment variables
                 var clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
                 var clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
-                // Fallback to config file if env vars are not set
+
+                // Priority 2: Windows Registry (HKLM\SOFTWARE\DeepSeekAgentMCP)
+                if (string.IsNullOrWhiteSpace(clientId) && OperatingSystem.IsWindows())
+                {
+                    try
+                    {
+                        using var regKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\DeepSeekAgentMCP");
+                        if (regKey?.GetValue("GOOGLE_CLIENT_ID") is string regId && !string.IsNullOrWhiteSpace(regId))
+                            clientId = regId;
+                        if (regKey?.GetValue("GOOGLE_CLIENT_SECRET") is string regSecret && !string.IsNullOrWhiteSpace(regSecret))
+                            clientSecret = regSecret;
+                    }
+                    catch { }
+                }
+
+                // Priority 3: Config file (appsettings.json)
                 if (string.IsNullOrWhiteSpace(clientId) && googleAuthProp.TryGetProperty("ClientId", out var clientIdProp))
                     clientId = clientIdProp.GetString() ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(clientSecret) && googleAuthProp.TryGetProperty("ClientSecret", out var clientSecretProp))
@@ -378,7 +393,7 @@ public static class AgentHostBuilder
     /// <summary>
     /// Resolves the DeepSeek API key with inverted precedence:
     /// environment variables FIRST (Process scope, then User scope),
-    /// then falls back to config file as last resort.
+    /// then falls back to Windows Registry, then config file as last resort.
     /// </summary>
     private static string ResolveApiKey(string configApiKey)
     {
@@ -397,7 +412,22 @@ public static class AgentHostBuilder
                 return envKey;
         }
 
-        // Priority 3: Config file (last resort — may be versioned)
+        // Priority 3: Windows Registry (HKLM\SOFTWARE\DeepSeekAgentMCP)
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\DeepSeekAgentMCP");
+                if (key?.GetValue("DEEPSEEK_API_KEY") is string regValue && !string.IsNullOrWhiteSpace(regValue))
+                    return regValue;
+            }
+            catch
+            {
+                // Ignore registry errors
+            }
+        }
+
+        // Priority 4: Config file (last resort — may be versioned)
         if (!string.IsNullOrWhiteSpace(configApiKey))
         {
             System.Console.WriteLine("[WARNING] DeepSeek API Key loaded from config file. Consider using DEEPSEEK_API_KEY environment variable for better security.");

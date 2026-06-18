@@ -4,18 +4,18 @@
 
 ## ✨ Funcionalidades
 
-- **Integração com DeepSeek API** — Chat completions com suporte a streaming e function calling
-- **Múltiplos servidores MCP** — Conecte-se a vários servidores MCP simultaneamente
-- **Descoberta automática de ferramentas** — Ferramentas MCP são expostas automaticamente ao DeepSeek
-- **Loop interativo** — Terminal interativo para conversar com o agente
-- **Streaming** — Respostas em tempo real com streaming
-- **Histórico de conversação** — Mantém contexto entre mensagens
-- **Interface Web** — Chat interativo via navegador com API REST
+- 🤖 **Integração com DeepSeek API** — Chat completions com suporte a streaming e function calling
+- 🔌 **Múltiplos servidores MCP** — Conecte-se a vários servidores MCP simultaneamente
+- 🧰 **Descoberta automática de ferramentas** — Ferramentas MCP expostas automaticamente ao DeepSeek
+- 💬 **Loop interativo** — Terminal interativo para conversar com o agente
+- ⚡ **Streaming** — Respostas em tempo real com streaming
+- 📜 **Histórico de conversação** — Mantém contexto entre mensagens
+- 🌐 **Interface Web** — Chat interativo via navegador com API REST
 - 🔐 **Autenticação Google OAuth** — Login com conta Google na interface web (desabilitado por padrão)
 - 🖥️ **Windows Service** — Execução como serviço do Windows em segundo plano
 - 🛡️ **Health check com auto-reconnect** — Reconexão automática a servidores MCP com falha
-- ⚡ **HttpClient pooling** — HttpClient reutilizável via construtor para evitar socket exhaustion
-- 🔑 **Resolução de variáveis via ambiente/registro** — Tokens lidos de env vars ou Registro Windows
+- ⚙️ **HttpClient pooling** — HttpClient reutilizável via construtor para evitar socket exhaustion
+- 🔑 **Resolução de variáveis via ambiente/registro** — Tokens e chaves lidos de env vars ou Registro Windows
 
 ## 🚀 Como usar
 
@@ -43,7 +43,20 @@ $env:DEEPSEEK_API_KEY = "sua-chave-aqui"
 export DEEPSEEK_API_KEY="sua-chave-aqui"
 ```
 
-> O programa busca a chave na seguinte ordem: `appsettings.json` → variável de ambiente (Process) → variável de ambiente (User). Se nenhuma for encontrada, solicita a digitação no terminal.
+> O programa busca a chave na seguinte ordem: variável de ambiente (Process) → variável de ambiente (User) → **Registro Windows** (`HKLM\SOFTWARE\DeepSeekAgentMCP\DEEPSEEK_API_KEY`) → `appsettings.json`. Se nenhuma for encontrada, solicita a digitação no terminal.
+
+#### Windows Service
+
+```powershell
+.\scripts\install-service.ps1 -Action install -DeepSeekApiKey "sua-chave-aqui"
+```
+
+Ou configure manualmente no Registro Windows:
+```powershell
+$regPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
+New-Item -Path $regPath -Force | Out-Null
+Set-ItemProperty -Path $regPath -Name "DEEPSEEK_API_KEY" -Value "sua-chave-aqui"
+```
 
 ### 1.1. Configurar Google OAuth (opcional)
 
@@ -64,7 +77,7 @@ $env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
 $env:GOOGLE_CLIENT_SECRET = "seu-client-secret"
 ```
 
-> O sistema busca as credenciais primeiro nas variáveis de ambiente `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET`. Se não estiverem definidas, faz fallback para os valores em `config/appsettings.json`.
+> O sistema busca as credenciais na seguinte ordem: **variáveis de ambiente** → **Registro Windows** (`HKLM\SOFTWARE\DeepSeekAgentMCP`) → `config/appsettings.json`.
 
 #### Configurar no Windows Service
 
@@ -72,18 +85,30 @@ Ao instalar como serviço Windows, passe as credenciais como parâmetros:
 
 ```powershell
 .\scripts\install-service.ps1 -Action install `
+    -DeepSeekApiKey "sk-sua-chave" `
     -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
-    -GoogleClientSecret "seu-client-secret"
+    -GoogleClientSecret "seu-client-secret" `
+    -McpServerToken "seu-token-mcp"
 ```
 
 Ou configure manualmente no registro:
 
 ```powershell
+# 1. Variáveis de ambiente do serviço (lidas como env vars)
 $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DeepSeekAgentMCP"
 Set-ItemProperty -Path $regPath -Name "Environment" -Value @(
     "GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com",
     "GOOGLE_CLIENT_SECRET=seu-client-secret"
 ) -Type MultiString
+
+# 2. Fallback direto via HKLM\SOFTWARE\DeepSeekAgentMCP
+$regPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
+New-Item -Path $regPath -Force | Out-Null
+Set-ItemProperty -Path $regPath -Name "GOOGLE_CLIENT_ID" -Value "seu-client-id.apps.googleusercontent.com"
+Set-ItemProperty -Path $regPath -Name "GOOGLE_CLIENT_SECRET" -Value "seu-client-secret"
+Set-ItemProperty -Path $regPath -Name "MCP_SERVER_TOKEN" -Value "seu-token-aqui"
+Set-ItemProperty -Path $regPath -Name "DEEPSEEK_API_KEY" -Value "sua-chave-deepseek"
+
 Restart-Service -Name DeepSeekAgentMCP
 ```
 
@@ -104,8 +129,10 @@ dotnet run --project src/DeepSeekAgentMCP
 
 #### Registro Windows (fallback)
 O valor também pode ser registrado diretamente em:
-```
-HKLM\SOFTWARE\DeepSeekAgentMCP\MCP_SERVER_TOKEN
+```powershell
+$regPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
+New-Item -Path $regPath -Force | Out-Null
+Set-ItemProperty -Path $regPath -Name "MCP_SERVER_TOKEN" -Value "seu-token-aqui"
 ```
 
 > O `config/mcp-servers.json` versionado contém o placeholder `${MCP_SERVER_TOKEN}`, que é resolvido automaticamente em tempo de execução: **variável de ambiente → Registro Windows → vazio**.
@@ -152,7 +179,7 @@ O projeto inclui **60 testes unitários** para:
 - **RateLimiter** — Sliding window rate limiting, limites por chave, reset
 - **SessionManager** — Gerenciamento de sessões de conversa (12 testes)
 
-## �🧩 Adicionar Novos Servidores MCP
+## 🧩 Adicionar Novos Servidores MCP
 
 Adicione novas entradas em `config/mcp-servers.json`:
 
@@ -169,13 +196,17 @@ Adicione novas entradas em `config/mcp-servers.json`:
 }
 ```
 
+> **Tokens e credenciais:** Use o padrão `${VARIAVEL_DE_AMBIENTE}` em valores sensíveis (como headers `Authorization`). O `McpToolManager` resolve automaticamente na ordem: **variável de ambiente → Registro Windows → string literal**.
+
 ## 🏗️ Estrutura do Projeto
 
 ```
 DeepSeekAgentMCP/
 ├── config/
 │   ├── appsettings.json            # Configuração principal
-│   └── mcp-servers.json            # Configuração dos servidores MCP
+│   ├── mcp-servers.json            # Configuração dos servidores MCP
+│   └── mcp-servers.template.json   # Template de configuração MCP
+├── publish/                        # Publicação do Windows Service (self-contained)
 ├── scripts/
 │   └── install-service.ps1        # Instalação do Windows Service
 ├── src/DeepSeekAgentMCP/
@@ -216,6 +247,7 @@ DeepSeekAgentMCP/
 │       ├── RateLimiterTests.cs
 │       └── SessionManagerTests.cs
 ├── DeepSeekAgentMCP.slnx
+├── .gitignore
 └── README.md
 ```
 
@@ -231,11 +263,12 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 # Instalar o serviço (sem Google OAuth)
 .\scripts\install-service.ps1 -Action install
 
-# Instalar o serviço com Google OAuth
+# Instalar o serviço com todas as credenciais
 .\scripts\install-service.ps1 -Action install `
+    -DeepSeekApiKey "sk-sua-chave" `
     -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
     -GoogleClientSecret "seu-client-secret" `
-    -McpServerToken "seu-token-aqui"
+    -McpServerToken "seu-token-mcp"
 
 # Verificar status
 .\scripts\install-service.ps1 -Action status
@@ -247,8 +280,11 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 O script:
 1. Compila o projeto em modo **Release** com `dotnet publish --self-contained`
 2. Cria o serviço Windows com nome `DeepSeekAgentMCP`
-3. Configura as variáveis de ambiente (Google OAuth, MCP Server Token) no registro do serviço
-4. Registra o `MCP_SERVER_TOKEN` também em `HKLM\SOFTWARE\DeepSeekAgentMCP` (fallback)
+3. Configura as variáveis de ambiente no registro do serviço (`Environment`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MCP_SERVER_TOKEN`
+4. Registra todas as variáveis em `HKLM\\SOFTWARE\\DeepSeekAgentMCP` como fallback:
+   - `DEEPSEEK_API_KEY` — Chave da API DeepSeek
+   - `MCP_SERVER_TOKEN` — Token de autenticação do servidor MCP
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Credenciais Google OAuth
 5. Configura inicialização automática
 6. Inicia o serviço automaticamente
 
