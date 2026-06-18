@@ -306,6 +306,11 @@ public class SessionManager : IAsyncDisposable
             }
         }
 
+        // Dispor recursos compartilhados (DeepSeekClient e McpToolManager)
+        // que são owned pelo SessionManager, não pelos agents individuais
+        _deepSeekClient.Dispose();
+        await _mcpToolManager.DisposeAsync();
+
         GC.SuppressFinalize(this);
     }
 

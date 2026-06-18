@@ -530,9 +530,11 @@ public class DeepSeekAgent : IAsyncDisposable
         return (toolResults, toolFailed);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await _mcpToolManager.DisposeAsync();
-        _deepSeek.Dispose();
+        // DeepSeekClient e McpToolManager são owned pelo SessionManager e compartilhados
+        // entre todas as sessões. Não os dispor aqui — o SessionManager cuida disso.
+        GC.SuppressFinalize(this);
+        return ValueTask.CompletedTask;
     }
 }
