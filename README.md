@@ -10,6 +10,9 @@
 - **Loop interativo** — Terminal interativo para conversar com o agente
 - **Streaming** — Respostas em tempo real com streaming
 - **Histórico de conversação** — Mantém contexto entre mensagens
+- **Interface Web** — Chat interativo via navegador com API REST
+- **Autenticação Google OAuth** — Login com conta Google na interface web
+- **Windows Service** — Execução como serviço do Windows em segundo plano
 
 ## 🚀 Como usar
 
@@ -38,6 +41,17 @@ export DEEPSEEK_API_KEY="sua-chave-aqui"
 ```
 
 > O programa busca a chave na seguinte ordem: `appsettings.json` → variável de ambiente (Process) → variável de ambiente (User). Se nenhuma for encontrada, solicita a digitação no terminal.
+
+### 1.1. Configurar Google OAuth (opcional)
+
+A interface web suporta login com Google. As credenciais **não devem** ser colocadas diretamente no `config/appsettings.json`. Configure por variáveis de ambiente:
+
+```powershell
+$env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
+$env:GOOGLE_CLIENT_SECRET = "seu-client-secret"
+```
+
+> O Client Secret pode ser definido em `appsettings.json` e sobrescrito pela env var `GOOGLE_CLIENT_SECRET`. O Client ID também pode ser definido em `appsettings.json` e sobrescrito pela env var `GOOGLE_CLIENT_ID`. Para habilitar o Google Auth, defina `"Enabled": true` na seção `GoogleAuth` do `config/appsettings.json`.
 
 ### 2. Configurar Servidores MCP
 
@@ -73,9 +87,13 @@ dotnet test --logger "console;verbosity=detailed"
 ```
 
 O projeto inclui testes unitários para:
+- **DeepSeekAgent** — Orquestração de chamadas e tratamento de respostas
+- **DeepSeekClient** — Chamadas HTTP à API DeepSeek (com fake client)
 - **InputSanitizer** — Sanitização de entrada, prevenção de prompt injection e XSS
-- **RateLimiter** — Sliding window rate limiting, limites por chave, reset
+- **McpToolManager** — Gerenciamento de servidores MCP (com fake manager)
 - **PathHelper** — Descoberta de caminhos em cenários de desenvolvimento e publicação
+- **RateLimiter** — Sliding window rate limiting, limites por chave, reset
+- **SessionManager** — Gerenciamento de sessões de conversa
 
 ## �🧩 Adicionar Novos Servidores MCP
 
@@ -107,7 +125,8 @@ DeepSeekAgentMCP/
 │   ├── Models/
 │   │   ├── AgentConfig.cs         # Modelo de configuração do agente
 │   │   ├── ChatMessage.cs         # Modelos de mensagem
-│   │   └── DeepSeekResponses.cs   # Modelos de requisição/resposta
+│   │   ├── DeepSeekResponses.cs   # Modelos de requisição/resposta
+│   │   └── GoogleAuthConfig.cs    # Configuração do Google OAuth
 │   ├── Skills/                    # Skills internas (templates para o modelo)
 │   │   ├── cte-recursivo-auto-relacionamento.md
 │   │   └── ...
@@ -127,12 +146,18 @@ DeepSeekAgentMCP/
 │   ├── RateLimiter.cs             # Rate limiter sliding window
 │   ├── SessionManager.cs          # Gerenciamento de sessões
 │   ├── SkillLoader.cs             # Carregamento de skills
-│   └── WebAppExtensions.cs        # Endpoints da API REST
+│   └── WebAppExtensions.cs        # Endpoints da API REST e config. do Google OAuth
 ├── tests/
 │   └── DeepSeekAgentMCP.Tests/    # Testes unitários (xUnit)
+│       ├── DeepSeekAgentTests.cs
+│       ├── DeepSeekClientTests.cs
+│       ├── FakeDeepSeekClient.cs
+│       ├── FakeMcpToolManager.cs
 │       ├── InputSanitizerTests.cs
+│       ├── McpToolManagerTests.cs
+│       ├── PathHelperTests.cs
 │       ├── RateLimiterTests.cs
-│       └── PathHelperTests.cs
+│       └── SessionManagerTests.cs
 ├── DeepSeekAgentMCP.slnx
 └── README.md
 ```
