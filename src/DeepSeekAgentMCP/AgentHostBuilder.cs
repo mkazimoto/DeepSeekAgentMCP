@@ -362,6 +362,16 @@ public static class AgentHostBuilder
                 options.SaveTokens = true;
                 options.CallbackPath = "/api/auth/google/callback";
                 options.ClaimActions.MapJsonKey("picture", "picture");
+                options.Events = new Microsoft.AspNetCore.Authentication.OAuth.OAuthEvents
+                {
+                    OnCreatingTicket = context =>
+                    {
+                        context.Identity?.AddClaim(new System.Security.Claims.Claim(
+                            "login_timestamp",
+                            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()));
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    }
+                };
             });
 
             builder.Services.AddAuthorization();

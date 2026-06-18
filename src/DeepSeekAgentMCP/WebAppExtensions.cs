@@ -4,6 +4,7 @@ using DeepSeekAgentMCP.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using System.Collections.Concurrent;
 
 namespace DeepSeekAgentMCP;
 
@@ -16,6 +17,14 @@ public static class WebAppExtensions
     // Rate limiter: sliding window por IP (lazy, thread-safe)
     private static readonly Lazy<RateLimiter> _chatRateLimiter = new(() =>
         new RateLimiter(maxRequests: 30, windowSize: TimeSpan.FromMinutes(1)));
+
+    // Profile picture cache: userId+version -> (bytes, contentType)
+    private static readonly ConcurrentDictionary<string, (byte[] Data, string ContentType)> _pictureCache = new();
+    private static readonly HttpClient _pictureHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(10),
+        DefaultRequestHeaders = { { "User-Agent", "DeepSeekAgentMCP/1.0" } }
+    };
 
     /// <summary>
     /// Maps all common agent API endpoints with config from AgentConfig.
@@ -247,12 +256,17 @@ public static class WebAppExtensions
                         ?? user.FindFirst("urn:google:image")?.Value
                         ?? user.FindFirst("image")?.Value;
 
+                    var loginTimestamp = user.FindFirst("login_timestamp")?.Value ?? "0";
+                    var pictureUrl = pictureClaim != null
+                        ? $"/api/auth/profile-picture?v={loginTimestamp}"
+                        : null;
+
                     return Results.Ok(new
                     {
                         authenticated = true,
                         name = user.FindFirst(ClaimTypes.Name)?.Value,
                         email = user.FindFirst(ClaimTypes.Email)?.Value,
-                        picture = pictureClaim
+                        picture = pictureUrl
                     });
                 }
 
@@ -274,6 +288,64 @@ public static class WebAppExtensions
                 };
                 await httpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, properties);
                 return Results.Empty;
+            });
+
+            // GET /api/auth/profile-picture — proxy que baixa a foto do Google e cacheia no servidor
+            app.MapGet("/api/auth/profile-picture", async (HttpContext httpContext) =>
+            {
+                var user = httpContext.User;
+                if (user.Identity?.IsAuthenticated != true)
+                    return Results.Unauthorized();
+
+                var pictureClaim = user.FindFirst("picture")?.Value
+                    ?? user.FindFirst("urn:google:picture")?.Value
+                    ?? user.FindFirst("urn:google:image")?.Value
+                    ?? user.FindFirst("image")?.Value;
+
+                if (string.IsNullOrEmpty(pictureClaim))
+                    return Results.NotFound();
+
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? user.FindFirst(ClaimTypes.Email)?.Value
+                    ?? "default";
+
+                var version = httpContext.Request.Query["v"].FirstOrDefault() ?? "0";
+                var cacheKey = $"profile_pic_{userId}_{version}";
+
+                // Try server cache first
+                if (_pictureCache.TryGetValue(cacheKey, out var cached))
+                {
+                    httpContext.Response.Headers.CacheControl = "private, max-age=3600";
+                    return Results.File(cached.Data, cached.ContentType);
+                }
+
+                // Fetch from Google
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    var response = await _pictureHttpClient.GetAsync(pictureClaim, cts.Token);
+                    if (!response.IsSuccessStatusCode)
+                        return Results.NotFound();
+
+                    var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                    var data = await response.Content.ReadAsByteArrayAsync(cts.Token);
+
+                    _pictureCache[cacheKey] = (data, contentType);
+
+                    httpContext.Response.Headers.CacheControl = "private, max-age=3600";
+                    return Results.File(data, contentType);
+                }
+                catch
+                {
+                    // Se falhou, tenta servir o cache anterior (sem versão) como fallback
+                    var fallbackKey = $"profile_pic_{userId}_0";
+                    if (_pictureCache.TryGetValue(fallbackKey, out var fallback))
+                    {
+                        httpContext.Response.Headers.CacheControl = "private, max-age=60";
+                        return Results.File(fallback.Data, fallback.ContentType);
+                    }
+                    return Results.NotFound();
+                }
             });
 
             // POST /api/auth/logout — sign out
