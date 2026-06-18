@@ -76,9 +76,6 @@ public class DeepSeekClient : IDisposable
             ReasoningEffort = _reasoningEffort
         };
 
-        var json = JsonSerializer.Serialize(request);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
         _logger?.LogDebug("Sending chat request (model: {Model}, messages: {Count}, tools: {ToolCount})",
             _model, messages.Count, tools?.Count ?? 0);
 
@@ -92,6 +89,10 @@ public class DeepSeekClient : IDisposable
 
             try
             {
+                // Create fresh content each attempt to avoid issues with consumed HttpContent streams
+                var json = JsonSerializer.Serialize(request);
+                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
                 var response = await _httpClient.PostAsync("/chat/completions", content, cancellationToken);
 
                 if (response.IsSuccessStatusCode)

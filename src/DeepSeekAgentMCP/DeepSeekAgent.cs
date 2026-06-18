@@ -203,8 +203,7 @@ public class DeepSeekAgent : IAsyncDisposable
             }
 
             // No tool calls - this is the final response
-            var finalContent = message.Content;
-            return finalContent;
+            return message.Content ?? string.Empty;
         }
 
         return "The agent reached the maximum number of iterations. Please try a simpler request.";
@@ -323,7 +322,7 @@ public class DeepSeekAgent : IAsyncDisposable
             return streamedContent;
         }
 
-        return message.Content;
+        return message.Content ?? string.Empty;
     }
 
     /// <summary>
@@ -360,10 +359,8 @@ public class DeepSeekAgent : IAsyncDisposable
         // NOTE: Este método é SEMPRE chamado dentro de lock(_historyLock)
         if (_conversationHistory.Count <= _maxHistoryMessages) return;
 
-        // Keep the system prompt, remove oldest messages
-        var systemMessage = _conversationHistory[0];
+        // Keep the system prompt (index 0), remove oldest messages
         _conversationHistory.RemoveRange(1, _conversationHistory.Count - _maxHistoryMessages);
-        _conversationHistory[0] = systemMessage;
     }
 
     /// <summary>

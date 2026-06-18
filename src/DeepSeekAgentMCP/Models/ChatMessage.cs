@@ -11,7 +11,8 @@ public class ChatMessage
     public string Role { get; set; } = "user";
 
     [JsonPropertyName("content")]
-    public string Content { get; set; } = string.Empty;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Content { get; set; }
 
     [JsonPropertyName("tool_calls")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

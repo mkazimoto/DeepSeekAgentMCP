@@ -72,7 +72,7 @@ public class ToolFunction
     public string Description { get; set; } = string.Empty;
 
     [JsonPropertyName("parameters")]
-    public object Parameters { get; set; } = new { };
+    public System.Text.Json.Nodes.JsonNode? Parameters { get; set; }
 }
 
 /// <summary>

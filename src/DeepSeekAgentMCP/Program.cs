@@ -156,7 +156,10 @@ static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManage
             };
             System.Diagnostics.Process.Start(psi);
         }
-        catch { }
+        catch
+        {
+            Console.WriteLine("[WebServer] Could not launch browser automatically.");
+        }
     }
 
     await app.RunAsync();
@@ -219,9 +222,10 @@ static async Task RunConsoleModeAsync(DeepSeekAgent agent)
                                 "tool" => $"\U0001f527 Tool ({msg.Name})",
                                 _ => $"\u2753 {msg.Role}"
                             };
-                            var content = msg.Content.Length > 150
-                                ? msg.Content[..150] + "..."
-                                : msg.Content;
+                            var text = msg.Content ?? string.Empty;
+                            var content = text.Length > 150
+                                ? text[..150] + "..."
+                                : text;
                             Console.WriteLine($"{prefix}: {content}");
                         }
                         Console.WriteLine("===========================");

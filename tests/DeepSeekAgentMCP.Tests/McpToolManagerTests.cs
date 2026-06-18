@@ -169,7 +169,7 @@ public class McpToolManagerTests
             {
                 Name = "server_test_tool",
                 Description = "[server] A test tool",
-                Parameters = new { type = "object", properties = new { } }
+                Parameters = System.Text.Json.Nodes.JsonNode.Parse("""{"type":"object","properties":{}}""")
             }
         };
 

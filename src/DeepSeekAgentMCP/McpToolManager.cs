@@ -398,15 +398,14 @@ public class McpToolManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Converts an MCP JSON schema to a plain object for the DeepSeek API.
+    /// Converts an MCP JSON schema to a JsonNode for consistent serialization with the DeepSeek API.
     /// </summary>
-    private static object ConvertMcpSchemaToObject(JsonElement? schema)
+    private static System.Text.Json.Nodes.JsonNode? ConvertMcpSchemaToObject(JsonElement? schema)
     {
         if (schema == null || schema.Value.ValueKind != JsonValueKind.Object)
-            return new { };
+            return null;
 
-        // Return the schema as-is since DeepSeek accepts standard JSON Schema
-        return schema.Value;
+        return System.Text.Json.Nodes.JsonNode.Parse(schema.Value.GetRawText());
     }
 
     public async ValueTask DisposeAsync()

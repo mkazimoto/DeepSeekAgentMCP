@@ -99,15 +99,7 @@ public class DeepSeekClientTests
             BaseAddress = new Uri("https://api.deepseek.com")
         };
 
-        var client = new DeepSeekClient(
-            "test-api-key",
-            "deepseek-v4-flash",
-            4096,
-            0.7,
-            null, null, null, 300);
-
-        // Use reflection to inject our mock HttpClient
-        SetHttpClient(client, httpClient);
+        var client = CreateClientWithMockHttpClient(httpClient);
 
         // Act
         var result = await client.SendChatAsync(
@@ -146,8 +138,7 @@ public class DeepSeekClientTests
         }))
         { BaseAddress = new Uri("https://api.deepseek.com") };
 
-        var client = new DeepSeekClient("test-api-key", httpClientTimeoutSeconds: 30);
-        SetHttpClient(client, httpClient);
+        var client = CreateClientWithMockHttpClient(httpClient);
 
         // Act
         var result = await client.SendChatAsync(
@@ -182,8 +173,7 @@ public class DeepSeekClientTests
         }))
         { BaseAddress = new Uri("https://api.deepseek.com") };
 
-        var client = new DeepSeekClient("test-api-key", httpClientTimeoutSeconds: 30);
-        SetHttpClient(client, httpClient);
+        var client = CreateClientWithMockHttpClient(httpClient);
 
         // Act
         var result = await client.SendChatAsync(
@@ -205,8 +195,7 @@ public class DeepSeekClientTests
             })))
         { BaseAddress = new Uri("https://api.deepseek.com") };
 
-        var client = new DeepSeekClient("test-api-key", httpClientTimeoutSeconds: 30);
-        SetHttpClient(client, httpClient);
+        var client = CreateClientWithMockHttpClient(httpClient);
 
         // Act & Assert
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
@@ -237,8 +226,7 @@ public class DeepSeekClientTests
         }))
         { BaseAddress = new Uri("https://api.deepseek.com") };
 
-        var client = new DeepSeekClient("test-api-key", httpClientTimeoutSeconds: 30);
-        SetHttpClient(client, httpClient);
+        var client = CreateClientWithMockHttpClient(httpClient);
 
         var tools = new List<ToolDefinition>
         {
@@ -248,7 +236,7 @@ public class DeepSeekClientTests
                 {
                     Name = "test_tool",
                     Description = "A test tool",
-                    Parameters = new { }
+                    Parameters = null
                 }
             }
         };
@@ -265,14 +253,10 @@ public class DeepSeekClientTests
     }
 
     /// <summary>
-    /// Uses reflection to inject a mock HttpClient into DeepSeekClient.
-    /// DeepSeekClient creates its own HttpClient internally via the constructor.
+    /// Creates a DeepSeekClient with a mock HttpClient injected via the constructor.
     /// </summary>
-    private static void SetHttpClient(DeepSeekClient client, HttpClient httpClient)
+    private static DeepSeekClient CreateClientWithMockHttpClient(HttpClient httpClient, string apiKey = "test-api-key")
     {
-        var field = typeof(DeepSeekClient).GetField("_httpClient",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(field);
-        field.SetValue(client, httpClient);
+        return new DeepSeekClient(apiKey, httpClient: httpClient);
     }
 }

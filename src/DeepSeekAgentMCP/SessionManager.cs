@@ -50,8 +50,17 @@ public class SessionManager : IAsyncDisposable
             }
             finally
             {
-                _activeRequests.TryRemove(sessionId, out _);
-                cts.Dispose();
+                // Use TryRemove with value to avoid race with CancelRequest:
+                // only the winner (TryRemove returning true or CancelRequest) disposes
+                if (_activeRequests.TryRemove(sessionId, out var removed))
+                {
+                    removed?.Dispose();
+                    if (removed != cts) cts.Dispose();
+                }
+                else
+                {
+                    cts.Dispose();
+                }
             }
         }
         finally
@@ -98,8 +107,16 @@ public class SessionManager : IAsyncDisposable
             }
             finally
             {
-                _activeRequests.TryRemove(sessionId, out _);
-                cts.Dispose();
+                // Use TryRemove with value to avoid race with CancelRequest
+                if (_activeRequests.TryRemove(sessionId, out var removed))
+                {
+                    removed?.Dispose();
+                    if (removed != cts) cts.Dispose();
+                }
+                else
+                {
+                    cts.Dispose();
+                }
             }
         }
         finally
@@ -116,7 +133,7 @@ public class SessionManager : IAsyncDisposable
         if (_activeRequests.TryRemove(sessionId, out var cts))
         {
             Console.WriteLine($"[Session] Cancelling request for session: {sessionId}");
-            cts.Cancel();
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
             cts.Dispose();
         }
     }

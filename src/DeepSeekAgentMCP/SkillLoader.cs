@@ -17,6 +17,7 @@ public static partial class SkillLoader
     private static DateTime _lastFileChangeEvent = DateTime.MinValue;
     private static readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
     private static FileSystemWatcher? _fileWatcher;
+    private static FileSystemWatcher? _instructionsWatcher;
     private static readonly ReaderWriterLockSlim _cacheLock = new();
 
     /// <summary>
@@ -229,6 +230,26 @@ public static partial class SkillLoader
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[SkillLoader] Failed to setup FileWatcher: {ex.Message}");
+        }
+
+        // Also watch instructions.md for changes
+        try
+        {
+            var instructionsDir = Path.GetDirectoryName(PathHelper.FindInstructionsFile());
+            if (!string.IsNullOrEmpty(instructionsDir) && Directory.Exists(instructionsDir))
+            {
+                _instructionsWatcher = new FileSystemWatcher(instructionsDir, "instructions.md")
+                {
+                    NotifyFilter = NotifyFilters.LastWrite,
+                    EnableRaisingEvents = true
+                };
+                _instructionsWatcher.Changed += OnSkillFileChanged;
+                Console.WriteLine($"[SkillLoader] FileWatcher active on instructions.md in: {instructionsDir}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[SkillLoader] Failed to setup instructions.md watcher: {ex.Message}");
         }
     }
 
