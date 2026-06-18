@@ -71,4 +71,7 @@ public record AgentConfig
 
     /// <summary>Whether to summarize old history instead of discarding it</summary>
     public bool SummarizeHistory { get; init; } = false;
+
+    /// <summary>Google OAuth configuration (optional)</summary>
+    public GoogleAuthConfig? GoogleAuth { get; init; }
 }

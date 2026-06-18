@@ -5,6 +5,8 @@
 class ChatApp {
     constructor() {
         this.isLoading = false;
+        this.isAuthenticated = false;
+        this.userInfo = null;
         // Generate a unique session ID per tab/instance
         // This ensures each browser tab has its own isolated conversation
         this.sessionId = crypto.randomUUID ? crypto.randomUUID() : 
@@ -13,12 +15,101 @@ class ChatApp {
                 return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
             });
         this.initElements();
-        this.restoreWelcomeMessage();
         this.initEventListeners();
         this.initTheme();
-        this.loadMcpStatus();
-        this.autoResizeTextarea();
         this.initMermaid();
+        // Check auth status first, then initialize UI
+        this.checkAuthStatus();
+    }
+
+    // --- Authentication ---
+    async checkAuthStatus() {
+        try {
+            const response = await fetch('/api/auth/status');
+            const data = await response.json();
+
+            if (data.authenticated) {
+                this.isAuthenticated = true;
+                this.userInfo = data;
+                this.hideLogin();
+                this.restoreWelcomeMessage();
+                this.loadMcpStatus();
+                this.autoResizeTextarea();
+                this.showUserInfo(data);
+            } else if (data.authDisabled) {
+                // Auth is not configured — show the app directly
+                this.isAuthenticated = true;
+                this.hideLogin();
+                this.restoreWelcomeMessage();
+                this.loadMcpStatus();
+                this.autoResizeTextarea();
+            } else {
+                // Not authenticated — show login screen
+                this.isAuthenticated = false;
+                this.showLogin();
+            }
+        } catch (err) {
+            // If endpoint fails, assume auth is disabled and show app
+            console.warn('Auth status check failed, showing app directly:', err);
+            this.isAuthenticated = true;
+            this.hideLogin();
+            this.restoreWelcomeMessage();
+            this.loadMcpStatus();
+            this.autoResizeTextarea();
+        }
+    }
+
+    showLogin() {
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            document.getElementById('google-signin-btn').onclick = () => {
+                window.location.href = '/api/auth/google/login';
+            };
+        }
+    }
+
+    hideLogin() {
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    showUserInfo(data) {
+        // Add user info to sidebar footer
+        const sidebarFooter = document.querySelector('.sidebar-footer');
+        if (sidebarFooter && data.name) {
+            const userInfoEl = document.createElement('div');
+            userInfoEl.className = 'user-info';
+            userInfoEl.innerHTML = `
+                <div class="user-info-avatar">
+                    ${data.picture
+                        ? `<img src="${data.picture}" alt="${this.escapeHtml(data.name)}" />`
+                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
+                    }
+                </div>
+                <div class="user-info-details">
+                    <span class="user-info-name">${this.escapeHtml(data.name)}</span>
+                    <button class="user-info-logout" id="logout-btn">Sair</button>
+                </div>
+            `;
+            // Remove existing user-info if any
+            const existing = sidebarFooter.querySelector('.user-info');
+            if (existing) existing.remove();
+            sidebarFooter.prepend(userInfoEl);
+
+            document.getElementById('logout-btn').addEventListener('click', () => this.logout());
+        }
+    }
+
+    async logout() {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.reload();
+        } catch {
+            window.location.reload();
+        }
     }
 
     // --- DOM Elements ---

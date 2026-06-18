@@ -1,5 +1,7 @@
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.Extensions.Logging;
 
 namespace DeepSeekAgentMCP;
@@ -118,6 +120,46 @@ public static class AgentHostBuilder
                 : 5;
         }
 
+        // --- Google OAuth config ---
+        GoogleAuthConfig? googleAuth = null;
+        if (doc.RootElement.TryGetProperty("GoogleAuth", out var googleAuthProp))
+        {
+            var googleEnabled = googleAuthProp.TryGetProperty("Enabled", out var gaEnabledProp) && gaEnabledProp.GetBoolean();
+            if (googleEnabled)
+            {
+                var clientId = googleAuthProp.TryGetProperty("ClientId", out var clientIdProp)
+                    ? clientIdProp.GetString() ?? string.Empty
+                    : string.Empty;
+                var clientSecret = googleAuthProp.TryGetProperty("ClientSecret", out var clientSecretProp)
+                    ? clientSecretProp.GetString() ?? string.Empty
+                    : string.Empty;
+                // Env vars take precedence over config file
+                var envClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
+                if (!string.IsNullOrWhiteSpace(envClientId))
+                    clientId = envClientId;
+                var envClientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
+                if (!string.IsNullOrWhiteSpace(envClientSecret))
+                    clientSecret = envClientSecret;
+
+                var scopes = new List<string> { "openid", "profile", "email" };
+                if (googleAuthProp.TryGetProperty("Scopes", out var scopesProp))
+                {
+                    scopes = scopesProp.EnumerateArray()
+                        .Select(s => s.GetString() ?? string.Empty)
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .ToList()!;
+                }
+
+                googleAuth = new GoogleAuthConfig
+                {
+                    ClientId = clientId,
+                    ClientSecret = clientSecret,
+                    Scopes = scopes,
+                    Enabled = true
+                };
+            }
+        }
+
         return new AgentConfig
         {
             ApiKey = ResolveApiKey(apiKey),
@@ -145,7 +187,8 @@ public static class AgentHostBuilder
             ToolDefinitionsCacheSeconds = doc.RootElement.TryGetProperty("ToolDefinitionsCacheSeconds", out var cacheProp)
                 ? cacheProp.GetInt32()
                 : 30,
-            SummarizeHistory = doc.RootElement.TryGetProperty("SummarizeHistory", out var summarizeProp) && summarizeProp.GetBoolean()
+            SummarizeHistory = doc.RootElement.TryGetProperty("SummarizeHistory", out var summarizeProp) && summarizeProp.GetBoolean(),
+            GoogleAuth = googleAuth
         };
     }
 
@@ -268,12 +311,56 @@ public static class AgentHostBuilder
             logger?.LogInformation("HTTPS enabled");
         }
 
+        // --- Google OAuth + Cookie Authentication ---
+        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 })
+        {
+            builder.Services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+            })
+            .AddCookie(options =>
+            {
+                options.Cookie.Name = "deepseek-agent-auth";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = true;
+                options.LoginPath = "/api/auth/google/login";
+                options.LogoutPath = "/api/auth/logout";
+                options.AccessDeniedPath = "/";
+            })
+            .AddGoogle(options =>
+            {
+                options.ClientId = config.GoogleAuth.ClientId;
+                options.ClientSecret = config.GoogleAuth.ClientSecret;
+                options.Scope.Clear();
+                foreach (var scope in config.GoogleAuth.Scopes)
+                    options.Scope.Add(scope);
+                options.SaveTokens = true;
+                options.CallbackPath = "/api/auth/google/callback";
+            });
+
+            builder.Services.AddAuthorization();
+
+            logger?.LogInformation("Google OAuth authentication enabled");
+        }
+
         builder.WebHost.UseUrls(config.WebUrls);
         var app = builder.Build();
 
         if (config.AllowedCorsOrigins.Count > 0)
         {
             app.UseCors();
+        }
+
+        // --- Authentication middleware (only if Google auth is enabled) ---
+        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 })
+        {
+            app.UseAuthentication();
+            app.UseAuthorization();
         }
 
         app.UseStaticFiles();

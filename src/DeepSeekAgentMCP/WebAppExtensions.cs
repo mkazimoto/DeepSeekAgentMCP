@@ -1,5 +1,9 @@
 using System.Net;
+using System.Security.Claims;
 using DeepSeekAgentMCP.Models;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 
 namespace DeepSeekAgentMCP;
 
@@ -23,7 +27,7 @@ public static class WebAppExtensions
         AgentConfig config,
         ILogger? logger = null)
     {
-        return MapAgentEndpoints(app, sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, config.RequireAuth, config.AuthToken, config.MaxSessionsPerIp, logger);
+        return MapAgentEndpoints(app, sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, config.RequireAuth, config.AuthToken, config.MaxSessionsPerIp, logger, config.GoogleAuth);
     }
 
     /// <summary>
@@ -38,31 +42,49 @@ public static class WebAppExtensions
         bool requireAuth,
         string? authToken,
         int maxSessionsPerIp,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        GoogleAuthConfig? googleAuth = null)
     {
-        // --- Helper to check authentication ---
-        static IResult? CheckAuth(HttpContext httpContext, bool requireAuth, string? authToken)
+        var googleAuthEnabled = googleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 };
+
+        // --- Helper to check authentication (token OR Google cookie) ---
+        static IResult? CheckAuth(HttpContext httpContext, bool requireAuth, string? authToken, bool googleAuthEnabled)
         {
-            if (!requireAuth || string.IsNullOrEmpty(authToken))
+            // If no auth is required at all, allow
+            if (!requireAuth && !googleAuthEnabled)
                 return null;
 
-            var provided = httpContext.Request.Headers.Authorization.FirstOrDefault()?.Replace("Bearer ", "")
-                ?? httpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+            // Check Google cookie auth first
+            if (googleAuthEnabled && httpContext.User.Identity?.IsAuthenticated == true)
+                return null;
 
-            if (string.IsNullOrEmpty(provided) || !string.Equals(provided, authToken, StringComparison.Ordinal))
+            // Check token auth
+            if (requireAuth && !string.IsNullOrEmpty(authToken))
             {
-                httpContext.Response.Headers.WWWAuthenticate = "Bearer";
-                return Results.Json(new { error = "Unauthorized. Provide a valid API key via Authorization: Bearer header or X-API-Key header." }, statusCode: 401);
+                var provided = httpContext.Request.Headers.Authorization.FirstOrDefault()?.Replace("Bearer ", "")
+                    ?? httpContext.Request.Headers["X-API-Key"].FirstOrDefault();
+
+                if (!string.IsNullOrEmpty(provided) && string.Equals(provided, authToken, StringComparison.Ordinal))
+                    return null;
             }
 
-            return null;
+            // If only Google auth is enabled (no token auth), allow if Google auth passes
+            if (googleAuthEnabled && !requireAuth)
+            {
+                // User is not authenticated via Google cookie
+                httpContext.Response.Headers.WWWAuthenticate = "Bearer";
+                return Results.Json(new { error = "Unauthorized. Please sign in with Google first." }, statusCode: 401);
+            }
+
+            httpContext.Response.Headers.WWWAuthenticate = "Bearer";
+            return Results.Json(new { error = "Unauthorized. Provide a valid API key via Authorization: Bearer header or X-API-Key header." }, statusCode: 401);
         }
 
         // POST /api/chat — send a message (com rate limiting e sanitização)
         app.MapPost("/api/chat", async (HttpContext httpContext, ChatRequest request, CancellationToken ct) =>
         {
             // --- Autenticação ---
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             // --- Validações básicas ---
@@ -131,7 +153,7 @@ public static class WebAppExtensions
         // GET /api/status — MCP server status + connected servers
         app.MapGet("/api/status", (HttpContext httpContext) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             var clientIp = GetClientIp(httpContext);
@@ -151,7 +173,7 @@ public static class WebAppExtensions
         // GET /api/history — conversation history for a session
         app.MapGet("/api/history", (HttpContext httpContext, string? sessionId) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             var sid = sessionId ?? "default";
@@ -168,7 +190,7 @@ public static class WebAppExtensions
         // POST /api/cancel — cancel an active request for a session
         app.MapPost("/api/cancel", (HttpContext httpContext, ChatRequest request) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
@@ -182,7 +204,7 @@ public static class WebAppExtensions
         // POST /api/clear — clear conversation for a session
         app.MapPost("/api/clear", async (HttpContext httpContext, ChatRequest request) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             if (!string.IsNullOrEmpty(request.SessionId) && request.SessionId.Length > 100)
@@ -196,7 +218,7 @@ public static class WebAppExtensions
         // GET /api/health — liveness/readiness probe
         app.MapGet("/api/health", (HttpContext httpContext) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken);
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
             return Results.Ok(new
@@ -206,6 +228,59 @@ public static class WebAppExtensions
                 activeSessions = sessionManager.ActiveSessionCount
             });
         });
+
+        // ============================================================
+        //  Google OAuth Endpoints
+        // ============================================================
+        if (googleAuthEnabled)
+        {
+            // GET /api/auth/status — check current authentication status
+            app.MapGet("/api/auth/status", (HttpContext httpContext) =>
+            {
+                var user = httpContext.User;
+                if (user.Identity?.IsAuthenticated == true)
+                {
+                    return Results.Ok(new
+                    {
+                        authenticated = true,
+                        name = user.FindFirst(ClaimTypes.Name)?.Value,
+                        email = user.FindFirst(ClaimTypes.Email)?.Value,
+                        picture = user.FindFirst("picture")?.Value
+                    });
+                }
+
+                return Results.Ok(new { authenticated = false });
+            });
+
+            // GET /api/auth/google/login — trigger Google OAuth challenge
+            app.MapGet("/api/auth/google/login", async (HttpContext httpContext) =>
+            {
+                // If already authenticated, redirect to home
+                if (httpContext.User.Identity?.IsAuthenticated == true)
+                    return Results.Redirect("/");
+
+                // Challenge with Google — after auth, redirect back to /
+                var redirectUrl = "/";
+                var properties = new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+                {
+                    RedirectUri = redirectUrl
+                };
+                await httpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, properties);
+                return Results.Empty;
+            });
+
+            // POST /api/auth/logout — sign out
+            app.MapPost("/api/auth/logout", async (HttpContext httpContext) =>
+            {
+                await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.Ok(new { success = true });
+            });
+        }
+        else
+        {
+            // Auth not enabled — return simple status
+            app.MapGet("/api/auth/status", () => Results.Ok(new { authenticated = false, authDisabled = true }));
+        }
 
         app.MapFallbackToFile("index.html");
 
