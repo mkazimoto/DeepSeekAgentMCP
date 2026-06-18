@@ -176,6 +176,7 @@ public class SessionManager : IAsyncDisposable
             }
 
             // Fire-and-forget dispose do agente
+            Console.WriteLine($"[Session] Disposing agent for session: {sessionId}");
             _ = DisposeAgentAsync(state.Agent);
             return true;
         }
@@ -242,6 +243,7 @@ public class SessionManager : IAsyncDisposable
                 }
 
                 // Dispose do agente (fire-and-forget dentro do timer)
+                Console.WriteLine($"[Session] Disposing stale agent for session: {id}");
                 _ = DisposeAgentAsync(state.Agent);
             }
         }

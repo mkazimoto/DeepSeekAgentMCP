@@ -23,37 +23,29 @@ public static class PathHelper
     }
 
     /// <summary>
-    /// Localiza o arquivo de configuração dos servidores MCP.
+    /// Localiza o arquivo de configuração dos servidores MCP
+    /// a partir do diretório do appsettings.json e um caminho relativo.
+    /// Não relê appsettings.json — usa o caminho recebido.
     /// </summary>
-    public static string FindMcpConfigPath(string? configPath = null)
+    public static string FindMcpConfigPath(string? configPath = null, string? mcpServerRelativePath = null)
     {
-        // Try next to config file first
+        mcpServerRelativePath ??= "config/mcp-servers.json";
+
+        // Try next to config file first (published layout)
         if (!string.IsNullOrEmpty(configPath))
         {
             var configDir = Path.GetDirectoryName(configPath) ?? AppContext.BaseDirectory;
-            var mcpPath = Path.Combine(configDir, "mcp-servers.json");
+            var mcpPath = Path.Combine(configDir, mcpServerRelativePath);
             if (File.Exists(mcpPath))
                 return mcpPath;
         }
 
-        // Try relative to project root
+        // Try from project root (development layout)
         var projectRoot = !string.IsNullOrEmpty(configPath)
             ? Path.GetDirectoryName(Path.GetDirectoryName(configPath)) ?? Directory.GetCurrentDirectory()
             : Directory.GetCurrentDirectory();
 
-        var relPath = "config/mcp-servers.json";
-        if (!string.IsNullOrEmpty(configPath) && File.Exists(configPath))
-        {
-            try
-            {
-                var configJson = File.ReadAllText(configPath);
-                using var doc = System.Text.Json.JsonDocument.Parse(configJson);
-                relPath = doc.RootElement.GetProperty("McpServerConfigPath").GetString() ?? "config/mcp-servers.json";
-            }
-            catch { }
-        }
-
-        return Path.GetFullPath(Path.Combine(projectRoot, relPath));
+        return Path.GetFullPath(Path.Combine(projectRoot, mcpServerRelativePath));
     }
 
     /// <summary>

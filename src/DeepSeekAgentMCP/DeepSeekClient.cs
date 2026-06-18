@@ -24,7 +24,7 @@ public class DeepSeekClient : IDisposable
 
     private const string BaseUrl = "https://api.deepseek.com";
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.7, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300, HttpClient? httpClient = null)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.3, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300, HttpClient? httpClient = null)
     {
         _apiKey = apiKey;
         _model = model;

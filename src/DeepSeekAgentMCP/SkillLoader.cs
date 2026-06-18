@@ -14,6 +14,8 @@ public static partial class SkillLoader
     private static string? _cachedSkillsPrompt;
     private static string? _cachedInstructions;
     private static DateTime _lastCacheLoad = DateTime.MinValue;
+    private static DateTime _lastFileChangeEvent = DateTime.MinValue;
+    private static readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
     private static FileSystemWatcher? _fileWatcher;
     private static readonly ReaderWriterLockSlim _cacheLock = new();
 
@@ -232,7 +234,11 @@ public static partial class SkillLoader
 
     private static void OnSkillFileChanged(object sender, FileSystemEventArgs e)
     {
-        // Debounce: múltiplos eventos podem ser disparados para um mesmo arquivo
+        var now = DateTime.UtcNow;
+        if (now - _lastFileChangeEvent < _debounceInterval)
+            return;
+        _lastFileChangeEvent = now;
+
         InvalidateCache();
     }
 

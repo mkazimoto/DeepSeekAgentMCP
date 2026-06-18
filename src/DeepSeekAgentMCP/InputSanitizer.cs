@@ -61,6 +61,6 @@ public static partial class InputSanitizer
     [GeneratedRegex(@"<\s*(script|iframe|embed|object|frame|frameset|applet|form|input|textarea|select|option|style|link|meta)\b[^>]*>.*?<\s*/\s*\1\s*>", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex DangerousTagsRegex();
 
-    [GeneratedRegex(@"(on\w+\s*=\s*[""'][^""']*[""'])", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:on\w+\s*=\s*(?:[""'][^""']*[""']|[^\s>""']+))|(?:href|src|action|data)\s*=\s*[""']?\s*javascript\s*:", RegexOptions.IgnoreCase)]
     private static partial Regex DangerousHtmlRegex();
 }

@@ -167,79 +167,7 @@ public class DeepSeekAgent : IAsyncDisposable
             // Check if the model wants to call tools
             if (message.ToolCalls is { Count: > 0 })
             {
-                var toolFailed = false;
-                var toolResults = new ConcurrentDictionary<string, (ToolCall Call, string Result)>();
-
-                if (_parallelToolCalls && message.ToolCalls.Count > 1)
-                {
-                    // Parallel execution with cancellation on first error if ContinueOnToolError is false
-                    using var parallelCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    var parallelOptions = new ParallelOptions
-                    {
-                        CancellationToken = parallelCts.Token,
-                        MaxDegreeOfParallelism = Math.Min(message.ToolCalls.Count, 3)
-                    };
-
-                    await Parallel.ForEachAsync(message.ToolCalls, parallelOptions, async (toolCall, ct) =>
-                    {
-                        ct.ThrowIfCancellationRequested();
-
-                        Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                        var result = await _mcpToolManager.ExecuteToolCallAsync(toolCall, ct);
-
-                        var isError = result.StartsWith("Error:", StringComparison.Ordinal);
-                        if (isError)
-                        {
-                            Console.WriteLine($"[Tool Error] {result}");
-                            if (!_continueOnToolError)
-                            {
-                                toolFailed = true;
-                                parallelCts.Cancel();
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[Tool Result] {result[..Math.Min(result.Length, 200)]}{(result.Length > 200 ? "..." : "")}");
-                        }
-
-                        toolResults[toolCall.Id] = (toolCall, result);
-                    });
-
-                    // Check cancellation was due to tool error
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                else
-                {
-                    // Sequential execution (default path for single tool or when parallel is disabled)
-                    foreach (var toolCall in message.ToolCalls)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-
-                        var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
-
-                        var isError = toolResult.StartsWith("Error:", StringComparison.Ordinal);
-                        if (isError)
-                        {
-                            Console.WriteLine($"[Tool Error] {toolResult}");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
-                        }
-
-                        toolResults[toolCall.Id] = (toolCall, toolResult);
-
-                        // If tool failed and ContinueOnToolError is false, stop the batch
-                        if (isError && !_continueOnToolError)
-                        {
-                            toolFailed = true;
-                            break;
-                        }
-                    }
-                }
+                var (toolResults, toolFailed) = await ExecuteToolCallsAsync(message.ToolCalls, cancellationToken);
 
                 // Add tool results to history in original order
                 lock (_historyLock)
@@ -327,39 +255,7 @@ public class DeepSeekAgent : IAsyncDisposable
         // Handle tool calls if any
         if (message.ToolCalls is { Count: > 0 })
         {
-            var toolResults = new ConcurrentDictionary<string, (ToolCall Call, string Result)>();
-
-            if (_parallelToolCalls && message.ToolCalls.Count > 1)
-            {
-                using var parallelCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var parallelOptions = new ParallelOptions
-                {
-                    CancellationToken = parallelCts.Token,
-                    MaxDegreeOfParallelism = Math.Min(message.ToolCalls.Count, 3)
-                };
-
-                await Parallel.ForEachAsync(message.ToolCalls, parallelOptions, async (toolCall, ct) =>
-                {
-                    ct.ThrowIfCancellationRequested();
-                    Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-                    var result = await _mcpToolManager.ExecuteToolCallAsync(toolCall, ct);
-                    Console.WriteLine($"[Tool Result] {result[..Math.Min(result.Length, 200)]}...");
-                    toolResults[toolCall.Id] = (toolCall, result);
-                });
-
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-            else
-            {
-                foreach (var toolCall in message.ToolCalls)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
-                    var toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
-                    Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}...");
-                    toolResults[toolCall.Id] = (toolCall, toolResult);
-                }
-            }
+            var (toolResults, _) = await ExecuteToolCallsAsync(message.ToolCalls, cancellationToken);
 
             // Add tool results to history in original order
             lock (_historyLock)
@@ -538,6 +434,103 @@ public class DeepSeekAgent : IAsyncDisposable
         {
             Console.WriteLine($"[Agent] History summarization failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Executes a list of tool calls (parallel or sequential) with error handling.
+    /// Shared between ProcessMessageAsync and ProcessMessageStreamingAsync
+    /// to eliminate ~70% code duplication.
+    /// </summary>
+    private async Task<(ConcurrentDictionary<string, (ToolCall Call, string Result)> Results, bool Failed)> ExecuteToolCallsAsync(
+        List<ToolCall> toolCalls, CancellationToken cancellationToken)
+    {
+        var toolResults = new ConcurrentDictionary<string, (ToolCall Call, string Result)>();
+        var toolFailed = false;
+
+        if (_parallelToolCalls && toolCalls.Count > 1)
+        {
+            using var parallelCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var parallelOptions = new ParallelOptions
+            {
+                CancellationToken = parallelCts.Token,
+                MaxDegreeOfParallelism = Math.Min(toolCalls.Count, 3)
+            };
+
+            await Parallel.ForEachAsync(toolCalls, parallelOptions, async (toolCall, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+
+                Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+
+                string result;
+                try
+                {
+                    result = await _mcpToolManager.ExecuteToolCallAsync(toolCall, ct);
+                }
+                catch (Exception ex)
+                {
+                    result = $"Error: {ex.Message}";
+                }
+
+                var isError = result.StartsWith("Error:", StringComparison.Ordinal);
+                if (isError)
+                {
+                    Console.WriteLine($"[Tool Error] {result}");
+                    if (!_continueOnToolError)
+                    {
+                        toolFailed = true;
+                        parallelCts.Cancel();
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[Tool Result] {result[..Math.Min(result.Length, 200)]}{(result.Length > 200 ? "..." : "")}");
+                }
+
+                toolResults[toolCall.Id] = (toolCall, result);
+            });
+
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        else
+        {
+            foreach (var toolCall in toolCalls)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                Console.WriteLine($"\n[Tool Call] {toolCall.Function.Name}({toolCall.Function.Arguments})");
+
+                string toolResult;
+                try
+                {
+                    toolResult = await _mcpToolManager.ExecuteToolCallAsync(toolCall, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    toolResult = $"Error: {ex.Message}";
+                }
+
+                var isError = toolResult.StartsWith("Error:", StringComparison.Ordinal);
+                if (isError)
+                {
+                    Console.WriteLine($"[Tool Error] {toolResult}");
+                }
+                else
+                {
+                    Console.WriteLine($"[Tool Result] {toolResult[..Math.Min(toolResult.Length, 200)]}{(toolResult.Length > 200 ? "..." : "")}");
+                }
+
+                toolResults[toolCall.Id] = (toolCall, toolResult);
+
+                if (isError && !_continueOnToolError)
+                {
+                    toolFailed = true;
+                    break;
+                }
+            }
+        }
+
+        return (toolResults, toolFailed);
     }
 
     public async ValueTask DisposeAsync()

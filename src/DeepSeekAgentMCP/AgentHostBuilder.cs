@@ -263,9 +263,8 @@ public static class AgentHostBuilder
     /// </summary>
     public static async Task<McpToolManager> CreateMcpManagerAsync(AgentConfig config, CancellationToken cancellationToken = default)
     {
-        // FindMcpConfigPath expects the path to appsettings.json to locate mcp-servers.json next to it
         var configPath = PathHelper.FindConfigPath();
-        var mcpConfigFullPath = PathHelper.FindMcpConfigPath(configPath);
+        var mcpConfigFullPath = PathHelper.FindMcpConfigPath(configPath, config.McpServerConfigPath);
 
         var mcpManager = new McpToolManager(mcpConfigFullPath);
         await mcpManager.InitializeAsync(cancellationToken);
