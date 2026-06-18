@@ -392,6 +392,7 @@ public class McpToolManager : IAsyncDisposable
             name = wrapper.ServerName,
             connected = true,
             toolCount = wrapper.Tools.Count,
+            toolNames = wrapper.Tools.Select(t => t.Name).ToList(),
             failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0),
             timeoutSeconds = wrapper.Config.TimeoutSeconds
         }).ToList();

@@ -205,6 +205,13 @@ body {
     padding: 2px 8px;
     border-radius: 10px;
     white-space: nowrap;
+    cursor: help;
+}
+
+/* Tooltip via title nativo do browser */
+.mcp-server-name,
+.mcp-server-tools {
+    position: relative;
 }
 
 /* Commands */

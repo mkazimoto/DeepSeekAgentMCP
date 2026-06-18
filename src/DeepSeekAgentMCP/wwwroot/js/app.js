@@ -284,13 +284,17 @@ class ChatApp {
             return;
         }
 
-        const html = data.mcpServers.map(server => `
+        const html = data.mcpServers.map(server => {
+            const toolList = server.toolNames && server.toolNames.length > 0
+                ? server.toolNames.map(t => `  • ${t}`).join('\n')
+                : 'Nenhuma ferramenta';
+            return `
             <div class="mcp-server-item">
                 <span class="mcp-server-dot ${server.connected ? 'connected' : 'disconnected'}"></span>
-                <span class="mcp-server-name">${this.escapeHtml(server.name)}</span>
-                <span class="mcp-server-tools">${server.toolCount} ferramenta${server.toolCount !== 1 ? 's' : ''}</span>
-            </div>
-        `).join('');
+                <span class="mcp-server-name" title="${this.escapeHtml(server.name)}">${this.escapeHtml(server.name)}</span>
+                <span class="mcp-server-tools" title="Ferramentas:\n${this.escapeHtml(toolList)}">${server.toolCount} ferramenta${server.toolCount !== 1 ? 's' : ''}</span>
+            </div>`;
+        }).join('');
 
         this.elements.mcpStatus.innerHTML = html;
     }

@@ -4,7 +4,7 @@ version: 1.0
 description: "Geração de consultas SQL com CTE recursivo para tabelas N:N com auto-relacionamento (ex: MRECCMP → MCMP)"
 ---
 
-# Skill: Consulta com CTE Recursivo (Auto-Relacionamento) com uma tabela n para n que referencia a mesma tabela
+# Skill: Consulta com CTE Recursivo (Auto-Relacionamento) com uma tabela estrutura N:N recursiva
 
 ## Quando usar
 
@@ -12,8 +12,7 @@ Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo 
 
 ## Exemplo prático (MRECCMP)
 
-Tabela MRECCMP n para n com auto-relacionamento para a tabela: (ambos na mesma tabela `MCMP`)
-`MRECCMP.IDCMP` → `MCMP.IDCMP` 
+`MRECCMP.IDCMP` → `MCMP.IDCMP` e 
 `MRECCMP.IDCMPFILHA` → `MCMP.IDCMP`
 
 Pedido: Listar toda a hierarquia de recursos da tarefas da tarefa 122 do projeto 2 e coligada 1.
