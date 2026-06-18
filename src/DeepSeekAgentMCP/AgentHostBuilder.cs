@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.Extensions.Logging;
@@ -360,6 +361,7 @@ public static class AgentHostBuilder
                     options.Scope.Add(scope);
                 options.SaveTokens = true;
                 options.CallbackPath = "/api/auth/google/callback";
+                options.ClaimActions.MapJsonKey("picture", "picture");
             });
 
             builder.Services.AddAuthorization();

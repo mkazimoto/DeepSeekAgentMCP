@@ -494,7 +494,7 @@ class ChatApp {
                 lineColor: '#4F46E5',
                 secondaryColor: '#ffffff',
                 tertiaryColor: '#f3f4f6',
-                background: '#000000',
+                background: '#ffffff',
                 fontSize: '14px',
             },
         });
@@ -1279,12 +1279,27 @@ class ChatApp {
         avatar.className = `message-avatar ${type === 'user' ? 'user-avatar' : 'agent-avatar'}`;
 
         if (type === 'user') {
-            avatar.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            const picture = this.userInfo?.picture;
+            if (picture) {
+                const img = document.createElement('img');
+                img.src = picture;
+                img.width = 40;
+                img.height = 40;
+                img.alt = 'Você';
+                img.style.borderRadius = '8px';
+                img.onerror = function() {
+                    this.outerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>`;
+                };
+                avatar.appendChild(img);
+            } else {
+                avatar.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                     <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
                     <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-            `;
+                </svg>`;
+            }
         } else {
             avatar.innerHTML = `
                 <img src="assets/robo.png" width="40" height="40" alt="Robô Assistente" style="border-radius: 8px" />
