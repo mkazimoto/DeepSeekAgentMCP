@@ -1198,10 +1198,11 @@ class ChatApp {
             height = vbParts[3];
         }
 
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         bgRect.setAttribute('width', width);
         bgRect.setAttribute('height', height);
-        bgRect.setAttribute('fill', '#000000');
+        bgRect.setAttribute('fill', isDark ? '#000000' : '#ffffff');
         bgRect.setAttribute('x', '0');
         bgRect.setAttribute('y', '0');
         clone.insertBefore(bgRect, clone.firstChild);

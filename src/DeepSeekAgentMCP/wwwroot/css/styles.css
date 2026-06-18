@@ -1092,7 +1092,7 @@ body {
 .mermaid-wrapper {
     margin: 16px 0;
     padding: 0;
-    background: #000000;
+    background: #ffffff;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow-x: auto;
@@ -1225,12 +1225,16 @@ body {
     width: 92vw;
     height: 90vh;
     max-width: 1400px;
-    background: #000000;
+    background: #ffffff;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     overflow: hidden;
     animation: modal-content-in 0.25s ease-out;
+}
+
+[data-theme="dark"] .mermaid-modal-content {
+    background: #000000;
 }
 
 @keyframes modal-content-in {
@@ -1356,8 +1360,12 @@ body {
     flex: 1;
     position: relative;
     overflow: auto;
-    background: #000000;
+    background: #ffffff;
     cursor: grab;
+}
+
+[data-theme="dark"] .mermaid-modal-body {
+    background: #000000;
 }
 
 .mermaid-modal-body.dragging {
