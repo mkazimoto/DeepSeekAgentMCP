@@ -25,3 +25,10 @@ you MUST ALWAYS also generate the Entity-Relationship Diagram (Mermaid erDiagram
 tables involved in that query. The diagram must come AFTER the SQL code, preceded by a
 brief explanation of the relationships between the tables. This applies regardless of
 whether the user explicitly asked for a diagram or not.
+
+CRITICAL RULE — SQL Validation: EVERY SQL query you generate MUST be validated FIRST
+using the `totvs-rm-database-mcp-server_totvs_validate_sql` tool BEFORE presenting it
+to the user. Call the tool with the SQL query as the argument, check the result, and
+only proceed if validation passes. If validation fails, fix the query based on the
+error message and re-validate until it passes. This applies to ANY SQL query you generate
+for ANY purpose.
