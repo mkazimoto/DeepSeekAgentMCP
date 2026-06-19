@@ -59,9 +59,6 @@ Se o módulo não estiver claro, use `totvs_list_modules` para listar todos os m
 Use o MCP para localizar as tabelas relevantes:
 
 ```
-# Quando souber o módulo:
-totvs_list_tables_by_module(module="<prefixo>")
-
 # Quando souber palavras-chave:
 totvs_search_tables(query="<termo de busca>")
 ```
@@ -70,12 +67,13 @@ totvs_search_tables(query="<termo de busca>")
 
 ---
 
-### Passo 3 — Obter o Esquema das Tabelas
+### Passo 3 — Obter o Esquema e Regras das Tabelas
 
 Para cada tabela identificada, obtenha seu schema completo:
 
 ```
 totvs_get_table_schema(table="<NOME_TABELA>")
+totvs_get_table_rules(table="<NOME_TABELA>")
 ```
 
 O schema retorna:
