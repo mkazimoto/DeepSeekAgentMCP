@@ -184,9 +184,15 @@ public static class AgentHostBuilder
         return new AgentConfig
         {
             ApiKey = ResolveApiKey(apiKey),
-            Model = deepSeekConfig.GetProperty("Model").GetString() ?? "deepseek-v4-flash",
-            MaxTokens = deepSeekConfig.GetProperty("MaxTokens").GetInt32(),
-            Temperature = deepSeekConfig.GetProperty("Temperature").GetDouble(),
+            Model = deepSeekConfig.TryGetProperty("Model", out var modelProp)
+                ? modelProp.GetString() ?? "deepseek-v4-flash"
+                : Environment.GetEnvironmentVariable("DEEPSEEK_MODEL") ?? "deepseek-v4-flash",
+            MaxTokens = deepSeekConfig.TryGetProperty("MaxTokens", out var maxTokensProp)
+                ? maxTokensProp.GetInt32()
+                : 4096,
+            Temperature = deepSeekConfig.TryGetProperty("Temperature", out var tempProp)
+                ? tempProp.GetDouble()
+                : 0.7,
             ThinkingConfig = thinkingConfig,
             ReasoningEffort = reasoningEffort,
             McpServerConfigPath = mcpServerConfigPath,
