@@ -21,9 +21,9 @@ public class DeepSeekChatRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? MaxTokens { get; set; }
 
-    // [JsonPropertyName("temperature")]
-    // [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    // public double? Temperature { get; set; }
+    [JsonPropertyName("temperature")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? Temperature { get; set; }
 
     [JsonPropertyName("tools")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
