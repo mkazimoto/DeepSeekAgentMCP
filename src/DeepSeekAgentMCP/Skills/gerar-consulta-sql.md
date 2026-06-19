@@ -101,7 +101,7 @@ Aplique **todas** as regras obrigatórias ao escrever o SQL:
 - [ ] **Prefira `INNER JOIN`** a subconsultas quando possível
 - [ ] **Formate o SQL** com indentação e quebras de linha legíveis
 - [ ] **Inclua comentários** explicando cada bloco lógico da query
-
+- [ ] **Sempre valide a sintaxe do SQL** Sempre chame a ferramenta `totvs_validate_sql` do MCP `totvs-rm-database-mcp-server`
 #### Template Base
 
 ```sql
