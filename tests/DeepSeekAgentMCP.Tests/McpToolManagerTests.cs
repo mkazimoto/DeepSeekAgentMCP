@@ -20,6 +20,7 @@ public class McpToolManagerTests
         Assert.Null(config.Headers);
         Assert.Null(config.EnvironmentVariables);
         Assert.Equal(60, config.TimeoutSeconds);
+        Assert.Null(config.AllowedTools);
     }
 
     [Fact]
@@ -46,6 +47,48 @@ public class McpToolManagerTests
         Assert.NotNull(config.Headers);
         Assert.Equal("Bearer token123", config.Headers["Authorization"]);
         Assert.Equal(120, config.TimeoutSeconds);
+        Assert.Null(config.AllowedTools);
+    }
+
+    [Fact]
+    public void McpServerConfig_JsonDeserialization_WithAllowedTools()
+    {
+        var json = """
+            {
+                "Name": "filtered-server",
+                "TransportType": "http",
+                "Url": "http://localhost:3000/mcp",
+                "AllowedTools": ["consulta_*", "executa_sql"]
+            }
+            """;
+
+        var config = JsonSerializer.Deserialize<McpServerConfig>(json);
+
+        Assert.NotNull(config);
+        Assert.Equal("filtered-server", config.Name);
+        Assert.NotNull(config.AllowedTools);
+        Assert.Equal(2, config.AllowedTools.Count);
+        Assert.Equal("consulta_*", config.AllowedTools[0]);
+        Assert.Equal("executa_sql", config.AllowedTools[1]);
+    }
+
+    [Fact]
+    public void McpServerConfig_JsonDeserialization_WithEmptyAllowedTools()
+    {
+        var json = """
+            {
+                "Name": "filtered-server",
+                "TransportType": "http",
+                "Url": "http://localhost:3000/mcp",
+                "AllowedTools": []
+            }
+            """;
+
+        var config = JsonSerializer.Deserialize<McpServerConfig>(json);
+
+        Assert.NotNull(config);
+        Assert.NotNull(config.AllowedTools);
+        Assert.Empty(config.AllowedTools);
     }
 
     [Fact]

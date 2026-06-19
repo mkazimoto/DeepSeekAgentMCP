@@ -38,6 +38,14 @@ public class McpServerConfig
 
     [JsonPropertyName("TimeoutSeconds")]
     public int TimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Optional list of allowed tool names from this server.
+    /// Supports wildcard patterns (e.g., "sql*", "*query*").
+    /// When empty or null, all tools from this server are allowed.
+    /// </summary>
+    [JsonPropertyName("AllowedTools")]
+    public List<string>? AllowedTools { get; set; }
 }
 
 /// <summary>
@@ -255,8 +263,18 @@ public class McpToolManager : IAsyncDisposable
 
         foreach (var wrapper in snapshot)
         {
-            foreach (var tool in wrapper.Tools)
+            var allowedTools = wrapper.Config.AllowedTools;
+            var tools = wrapper.Tools;
+
+            foreach (var tool in tools)
             {
+                // Apply AllowedTools filter if configured
+                if (allowedTools is { Count: > 0 } &&
+                    !allowedTools.Any(pattern => ToolNameMatchesPattern(tool.Name, pattern)))
+                {
+                    continue;
+                }
+
                 definitions.Add(new ToolDefinition
                 {
                     Function = new ToolFunction
@@ -320,6 +338,14 @@ public class McpToolManager : IAsyncDisposable
                 return $"Error: Tool '{actualToolName}' not found on server '{wrapper.ServerName}'.";
             }
 
+            // Verify the tool is allowed by the AllowedTools filter
+            var allowedTools = wrapper.Config.AllowedTools;
+            if (allowedTools is { Count: > 0 } &&
+                !allowedTools.Any(pattern => ToolNameMatchesPattern(tool.Name, pattern)))
+            {
+                return $"Error: Tool '{actualToolName}' is not allowed by the server's AllowedTools configuration.";
+            }
+
             try
             {
                 var arguments = string.IsNullOrWhiteSpace(toolCall.Function.Arguments)
@@ -370,7 +396,10 @@ public class McpToolManager : IAsyncDisposable
         {
             var failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0);
             var healthMark = failures > 0 ? $" ⚠ ({failures}/{_maxConsecutiveFailures} failures)" : " ✓";
-            lines.Add($"  - {wrapper.ServerName}: {wrapper.Tools.Count} tool(s){healthMark}");
+            var toolsText = wrapper.Config.AllowedTools is { Count: > 0 }
+                ? $"{wrapper.Tools.Count} tool(s) [filtered: {string.Join(", ", wrapper.Config.AllowedTools)}]"
+                : $"{wrapper.Tools.Count} tool(s)";
+            lines.Add($"  - {wrapper.ServerName}: {toolsText}{healthMark}");
         }
         return string.Join("\n", lines);
     }
@@ -393,9 +422,32 @@ public class McpToolManager : IAsyncDisposable
             connected = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0) == 0,
             toolCount = wrapper.Tools.Count,
             toolNames = wrapper.Tools.Select(t => t.Name).ToList(),
+            allowedTools = wrapper.Config.AllowedTools,
             failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0),
             timeoutSeconds = wrapper.Config.TimeoutSeconds
         }).ToList();
+    }
+
+    /// <summary>
+    /// Checks whether a tool name matches a pattern that may contain wildcards (*).
+    /// Matching is case-insensitive.
+    /// </summary>
+    private static bool ToolNameMatchesPattern(string toolName, string pattern)
+    {
+        if (string.IsNullOrEmpty(pattern)) return false;
+
+        // Exact match (case-insensitive)
+        if (string.Equals(toolName, pattern, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Wildcard pattern: convert to regex
+        if (pattern.Contains('*'))
+        {
+            var regexPattern = $"^{System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*")}$";
+            return System.Text.RegularExpressions.Regex.IsMatch(toolName, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        return false;
     }
 
     /// <summary>

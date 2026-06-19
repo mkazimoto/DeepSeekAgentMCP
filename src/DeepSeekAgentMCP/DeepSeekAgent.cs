@@ -108,7 +108,7 @@ public class DeepSeekAgent : IAsyncDisposable
         // Get tool definitions from MCP (with cache)
         var tools = _mcpToolManager.GetToolDefinitions(_toolCacheTtlSeconds);
 
-        var maxIterations = 10;
+        var maxIterations = 30;
         var currentIteration = 0;
 
         while (currentIteration < maxIterations)
@@ -196,7 +196,7 @@ public class DeepSeekAgent : IAsyncDisposable
                 // If a tool failed and ContinueOnToolError is false, return error to user
                 if (toolFailed)
                 {
-                    return "An error occurred while executing a tool. The request could not be completed.";
+                    return "Ocorreu um erro ao executar uma ferramenta. A solicitação não pôde ser concluída.";
                 }
 
                 continue;
@@ -206,7 +206,7 @@ public class DeepSeekAgent : IAsyncDisposable
             return message.Content ?? string.Empty;
         }
 
-        return "The agent reached the maximum number of iterations. Please try a simpler request.";
+        return "O agente atingiu o número máximo de iterações. Por favor, tente uma solicitação mais simples.";
     }
 
     /// <summary>
