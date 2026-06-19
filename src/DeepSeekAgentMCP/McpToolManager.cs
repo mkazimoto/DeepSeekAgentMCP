@@ -60,7 +60,7 @@ public class McpToolManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, int> _failureCounts = new();
     private Timer? _healthCheckTimer;
     private readonly int _maxConsecutiveFailures = 3;
-    private readonly TimeSpan _healthCheckInterval = TimeSpan.FromMinutes(2);
+    private readonly TimeSpan _healthCheckInterval = TimeSpan.FromSeconds(10);
     private bool _disposed;
     private CancellationTokenSource? _shutdownCts;
 
@@ -390,7 +390,7 @@ public class McpToolManager : IAsyncDisposable
         return snapshot.Select(wrapper => (object)new
         {
             name = wrapper.ServerName,
-            connected = true,
+            connected = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0) == 0,
             toolCount = wrapper.Tools.Count,
             toolNames = wrapper.Tools.Select(t => t.Name).ToList(),
             failures = _failureCounts.GetValueOrDefault(wrapper.ServerName, 0),

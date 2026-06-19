@@ -14,6 +14,7 @@ class ChatApp {
                 const r = Math.random() * 16 | 0;
                 return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
             });
+        this._statusPollInterval = null;
         this.initElements();
         this.initEventListeners();
         this.initTheme();
@@ -34,6 +35,7 @@ class ChatApp {
                 this.hideLogin();
                 this.restoreWelcomeMessage();
                 this.loadMcpStatus();
+                this.startStatusPolling();
                 this.autoResizeTextarea();
                 this.showUserInfo(data);
             } else if (data.authDisabled) {
@@ -42,6 +44,7 @@ class ChatApp {
                 this.hideLogin();
                 this.restoreWelcomeMessage();
                 this.loadMcpStatus();
+                this.startStatusPolling();
                 this.autoResizeTextarea();
             } else {
                 // Not authenticated — show login screen
@@ -55,6 +58,7 @@ class ChatApp {
             this.hideLogin();
             this.restoreWelcomeMessage();
             this.loadMcpStatus();
+            this.startStatusPolling();
             this.autoResizeTextarea();
         }
     }
@@ -316,6 +320,12 @@ class ChatApp {
         }).join('');
 
         this.elements.mcpStatus.innerHTML = html;
+    }
+
+    /** Inicia polling periódico do status dos servidores MCP a cada 10 segundos */
+    startStatusPolling() {
+        if (this._statusPollInterval) clearInterval(this._statusPollInterval);
+        this._statusPollInterval = setInterval(() => this.loadMcpStatus(), 10_000);
     }
 
     // --- Send Message ---
