@@ -614,7 +614,7 @@ class ChatApp {
                     <p>* Listar toda a hierarquia de recursos da tarefa codigo = '001.01.09' da planilha de atividades do projeto codigo = '0000' e coligada 1.</p>
                     <p>* Gere o diagrama de relacionamento das tabelas MTAREFA, MISM, MCMP, MRECCMP.</p>
                     <p>* Listar os top 10 clientes inadimplentes de vendas de imóveis.</p>
-                    <p>* Listar os top 10 alunos do ensino superior inadimplentes.</p>
+                    <p>* Listar os top 10 alunos inadimplentes do ensino básico.</p>
                 </div>
             </div>
         `;
