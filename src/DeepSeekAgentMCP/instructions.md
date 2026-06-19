@@ -15,6 +15,12 @@ IMPORTANT: When the user asks for a diagram (diagrama), schema, or relationship 
 of database tables, ALWAYS use Mermaid ER Diagram syntax inside a ```mermaid code block.
 Never use a generic code block for diagrams.
 
+CRITICAL RULE — Use the skill gerar-consulta-sql.md: Whenever you need to generate a SQL query,
+you MUST follow the skill defined in `Skills/gerar-consulta-sql.md`. This skill defines the
+complete workflow for generating T-SQL queries for the ERP RM TOTVS database, including:
+module prefix discovery, table discovery via MCP, schema retrieval, query construction with
+all formatting rules (NOLOCK, CODCOLIGADA filtering, explicit columns, etc.), and validation.
+
 CRITICAL RULE — Avoid variable declarations: Always avoid declaring intermediate or temporary variables
 when writing code. Prefer inline expressions, chained method calls, and direct return values
 instead of storing results in variables. This keeps the code more concise and readable.
