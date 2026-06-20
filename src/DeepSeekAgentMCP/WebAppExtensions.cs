@@ -143,12 +143,14 @@ public static class WebAppExtensions
             {
                 var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, ct);
 
-                // Sanitiza a resposta para prevenir XSS no frontend
-                var safeResponse = InputSanitizer.SanitizeForDisplay(response);
-
+                // NOTA: A resposta NÃO passa por SanitizeForDisplay aqui porque:
+                // 1. A serialização JSON já faz escape de caracteres HTML automaticamente
+                // 2. O marked.parse() no frontend já renderiza HTML com segurança
+                // 3. A SanitizeForDisplay tem uma regex (on\w+\s*=) que corrompe SQL
+                //    contendo cláusulas ON seguidas de = (ex: INNER JOIN T2 ON T2.COL = T1.COL)
                 return Results.Ok(new
                 {
-                    response = safeResponse,
+                    response,
                     remaining = _chatRateLimiter.Value.GetRemainingRequests(clientIp)
                 });
             }
