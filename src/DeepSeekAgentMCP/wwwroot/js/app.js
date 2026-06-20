@@ -33,7 +33,7 @@ class ChatApp {
                 this.isAuthenticated = true;
                 this.userInfo = data;
                 this.hideLogin();
-                this.restoreWelcomeMessage();
+                await this.restoreWelcomeMessage();
                 this.loadMcpStatus();
                 this.startStatusPolling();
                 this.autoResizeTextarea();
@@ -42,7 +42,7 @@ class ChatApp {
                 // Auth is not configured — show the app directly
                 this.isAuthenticated = true;
                 this.hideLogin();
-                this.restoreWelcomeMessage();
+                await this.restoreWelcomeMessage();
                 this.loadMcpStatus();
                 this.startStatusPolling();
                 this.autoResizeTextarea();
@@ -56,7 +56,7 @@ class ChatApp {
             console.warn('Auth status check failed, showing app directly:', err);
             this.isAuthenticated = true;
             this.hideLogin();
-            this.restoreWelcomeMessage();
+            await this.restoreWelcomeMessage();
             this.loadMcpStatus();
             this.startStatusPolling();
             this.autoResizeTextarea();
@@ -493,7 +493,7 @@ class ChatApp {
                 body: JSON.stringify({ message: '', sessionId: this.sessionId })
             });
             this.elements.messagesContainer.innerHTML = '';
-            this.restoreWelcomeMessage();
+            await this.restoreWelcomeMessage();
             this.showToast('🧹 Conversa limpa');
         } catch (err) {
             this.showToast('❌ Erro ao limpar conversa');
@@ -602,12 +602,22 @@ class ChatApp {
         }
     }
 
-    restoreWelcomeMessage() {
+    async restoreWelcomeMessage() {
         const container = this.elements.messagesContainer;
 
         const div = document.createElement('div');
         div.className = 'message welcome-message';
         div.id = 'welcome-message';
+
+        // Load welcome text from markdown file
+        let welcomeHtml = '';
+        try {
+            const response = await fetch('welcome-message.md');
+            const markdown = await response.text();
+            welcomeHtml = this.formatMessage(markdown);
+        } catch {
+            welcomeHtml = '<p>👋 Bem vindo! Sou o <strong>Assistente gerador de consulta SQL</strong>.</p>';
+        }
 
         div.innerHTML = `
             <div class="message-avatar agent-avatar">
@@ -616,16 +626,7 @@ class ChatApp {
             <div class="message-content">
                 <div class="message-sender">Assistente gerador de consulta SQL - ERP TOTVS RM</div>
                 <div class="message-text">
-                    <p>👋 Bem vindo! Sou o <strong>Assistente gerador de consulta SQL</strong>, especializado em gerar consultas SQL a partir das suas perguntas.</p>
-                    <p>Exemplo:</p>
-                    <p>* Listar todos os lançamentos financeiros a receber inadimplentes.</p>
-                    <p>* Listar os funcionários ativos agrupados por faixa etária de 10 em 10 anos.</p>
-                    <p>* Listar toda a hierarquia da tarefa codigo = '004' da planilha de atividades do projeto codigo = '0000' e coligada 1.</p>
-                    <p>* Listar toda a hierarquia de recursos da tarefa codigo = '001.01.09' da planilha de atividades do projeto codigo = '0000' e coligada 1.</p>
-                    <p>* Gere o diagrama de relacionamento das tabelas MTAREFA, MISM, MCMP, MRECCMP.</p>
-                    <p>* Listar os top 10 clientes inadimplentes de vendas de imóveis.</p>
-                    <p>* Quais são os clientes inadimplentes de aluguel de imóveis ?</p>
-                    <p>* Listar os top 10 alunos inadimplentes do ensino básico.</p>
+                    ${welcomeHtml}
                 </div>
             </div>
         `;
