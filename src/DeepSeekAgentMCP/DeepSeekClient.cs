@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
@@ -23,8 +22,10 @@ public class DeepSeekClient : IDisposable
     private readonly ILogger<DeepSeekClient>? _logger;
 
     private const string BaseUrl = "https://api.deepseek.com";
+    private readonly string? _apiLogPath;
+    private readonly object _apiLogLock = new();
 
-    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.3, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300, HttpClient? httpClient = null)
+    public DeepSeekClient(string apiKey, string model = "deepseek-v4-flash", int maxTokens = 4096, double temperature = 0.3, ThinkingConfig? thinking = null, string? reasoningEffort = null, ILogger<DeepSeekClient>? logger = null, int httpClientTimeoutSeconds = 300, HttpClient? httpClient = null, string? apiCommunicationLogPath = null)
     {
         _apiKey = apiKey;
         _model = model;
@@ -33,6 +34,16 @@ public class DeepSeekClient : IDisposable
         _thinking = thinking;
         _reasoningEffort = reasoningEffort;
         _logger = logger;
+
+        if (!string.IsNullOrEmpty(apiCommunicationLogPath))
+        {
+            _apiLogPath = Path.GetFullPath(apiCommunicationLogPath);
+            _logger?.LogInformation("API communication log enabled: {Path}", _apiLogPath);
+        }
+        else
+        {
+            _apiLogPath = null;
+        }
 
         if (httpClient != null)
         {
@@ -76,8 +87,10 @@ public class DeepSeekClient : IDisposable
             ReasoningEffort = _reasoningEffort
         };
 
+        var requestJson = JsonSerializer.Serialize(request);
         _logger?.LogDebug("Sending chat request (model: {Model}, messages: {Count}, tools: {ToolCount})",
             _model, messages.Count, tools?.Count ?? 0);
+        LogApiCommunication("REQUEST", requestJson, maskApiKey: true);
 
         // Retry with exponential backoff + jitter on 429 and 5xx
         const int maxRetries = 3;
@@ -90,14 +103,16 @@ public class DeepSeekClient : IDisposable
             try
             {
                 // Create fresh content each attempt to avoid issues with consumed HttpContent streams
-                var json = JsonSerializer.Serialize(request);
-                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                using var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync("/chat/completions", content, cancellationToken);
 
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                LogApiCommunication("RESPONSE", responseBody, attempt, (int)response.StatusCode);
+
                 if (response.IsSuccessStatusCode)
                 {
-                    var result = await response.Content.ReadFromJsonAsync<DeepSeekChatResponse>(cancellationToken: cancellationToken);
+                    var result = JsonSerializer.Deserialize<DeepSeekChatResponse>(responseBody);
                     if (result?.Usage != null)
                     {
                         _logger?.LogInformation("DeepSeek response OK (tokens: {PromptTokens} prompt + {CompletionTokens} completion = {TotalTokens} total)",
@@ -162,6 +177,8 @@ public class DeepSeekClient : IDisposable
         };
 
         var json = JsonSerializer.Serialize(request);
+        LogApiCommunication("REQUEST (streaming)", json, maskApiKey: true);
+
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger?.LogDebug("Sending streaming chat request (model: {Model}, messages: {Count})", _model, messages.Count);
@@ -172,8 +189,9 @@ public class DeepSeekClient : IDisposable
         };
 
         var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var statusCode = (int)response.StatusCode;
         response.EnsureSuccessStatusCode();
-        _logger?.LogInformation("DeepSeek streaming connection established");
+        _logger?.LogInformation("DeepSeek streaming connection established (HTTP {StatusCode})", statusCode);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
@@ -221,6 +239,45 @@ public class DeepSeekClient : IDisposable
             // Skip malformed chunks
         }
         return false;
+    }
+
+    /// <summary>
+    /// Writes a formatted API communication entry to the log file, if configured.
+    /// </summary>
+    private void LogApiCommunication(string direction, string json, int? attempt = null, int? statusCode = null, bool maskApiKey = false)
+    {
+        if (string.IsNullOrEmpty(_apiLogPath)) return;
+
+        try
+        {
+            var dir = Path.GetDirectoryName(_apiLogPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            var attemptStr = attempt.HasValue ? $" [attempt {attempt}]" : "";
+            var statusStr = statusCode.HasValue ? $" HTTP {statusCode}" : "";
+            var header = $"--- {direction}{attemptStr}{statusStr} @ {timestamp} ---";
+
+            // Mask the API key in the logged JSON for security
+            var loggedJson = json;
+            if (maskApiKey)
+            {
+                loggedJson = System.Text.RegularExpressions.Regex.Replace(
+                    json,
+                    """("api_key"\s*:\s*")([^"]+)(")""",
+                    m => m.Groups[1].Value + "***REDACTED***" + m.Groups[3].Value);
+            }
+
+            lock (_apiLogLock)
+            {
+                File.AppendAllText(_apiLogPath, header + Environment.NewLine + loggedJson + Environment.NewLine + Environment.NewLine);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to write API communication log to {Path}", _apiLogPath);
+        }
     }
 
     public void Dispose()

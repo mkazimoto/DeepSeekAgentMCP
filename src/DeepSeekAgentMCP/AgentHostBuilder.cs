@@ -215,7 +215,8 @@ public static class AgentHostBuilder
                 ? cacheProp.GetInt32()
                 : 30,
             SummarizeHistory = doc.RootElement.TryGetProperty("SummarizeHistory", out var summarizeProp) && summarizeProp.GetBoolean(),
-            GoogleAuth = googleAuth
+            GoogleAuth = googleAuth,
+            ApiCommunicationLogPath = ResolveApiLogPath(doc)
         };
     }
 
@@ -262,7 +263,8 @@ public static class AgentHostBuilder
             config.ThinkingConfig,
             config.ReasoningEffort,
             logger,
-            config.HttpClientTimeoutSeconds);
+            config.HttpClientTimeoutSeconds,
+            apiCommunicationLogPath: config.ApiCommunicationLogPath);
     }
 
     /// <summary>
@@ -408,6 +410,22 @@ public static class AgentHostBuilder
     }
 
     /// <summary>
+    /// Resolves the API communication log path from config, making it absolute using the content root.
+    /// Returns null if not configured.
+    /// </summary>
+    private static string? ResolveApiLogPath(JsonDocument doc)
+    {
+        if (!doc.RootElement.TryGetProperty("ApiCommunicationLogPath", out var apiLogProp))
+            return null;
+
+        var relativePath = apiLogProp.GetString();
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return null;
+
+        var contentRoot = PathHelper.FindContentRoot();
+        return Path.GetFullPath(Path.Combine(contentRoot, relativePath));
+    }
+
     /// Resolves the DeepSeek API key with inverted precedence:
     /// environment variables FIRST (Process scope, then User scope),
     /// then falls back to Windows Registry, then config file as last resort.

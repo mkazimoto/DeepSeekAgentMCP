@@ -74,4 +74,7 @@ public record AgentConfig
 
     /// <summary>Google OAuth configuration (optional)</summary>
     public GoogleAuthConfig? GoogleAuth { get; init; }
+
+    /// <summary>Path to log DeepSeek API request/response communication (optional). Leave null/empty to disable.</summary>
+    public string? ApiCommunicationLogPath { get; init; }
 }
