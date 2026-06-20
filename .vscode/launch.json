@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug DeepSeekAgentMCP",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/src/DeepSeekAgentMCP/DeepSeekAgentMCP.csproj"
+        },
+        {
+            "name": "Debug (Console Mode - Porta alternativa)",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/src/DeepSeekAgentMCP/DeepSeekAgentMCP.csproj"
+        },
+        {
+            "name": ".NET: Attach to Process",
+            "type": "dotnet",
+            "request": "attach"
+        }
+    ]
+}

@@ -113,6 +113,11 @@ public class DeepSeekClient : IDisposable
                 if (response.IsSuccessStatusCode)
                 {
                     var result = JsonSerializer.Deserialize<DeepSeekChatResponse>(responseBody);
+
+                    if (result != null)
+                        LogApiCommunication("RESPONSE2", result.Choices.FirstOrDefault()?.Message?.Content ?? string.Empty, attempt, (int)response.StatusCode);
+
+
                     if (result?.Usage != null)
                     {
                         _logger?.LogInformation("DeepSeek response OK (tokens: {PromptTokens} prompt + {CompletionTokens} completion = {TotalTokens} total)",
