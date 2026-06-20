@@ -9,4 +9,3 @@ Exemplo:
 * Quais são os top 10 clientes inadimplentes de vendas de imóveis ?
 * Quais são os top 10 clientes inadimplentes de aluguel de imóveis ?
 * Quais são os top 10 alunos inadimplentes do ensino básico ?
-* Quais são os top 10 alunos inadimplentes do ensino superior ?
