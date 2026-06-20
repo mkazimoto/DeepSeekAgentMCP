@@ -6,6 +6,7 @@
             "type": "dotnet",
             "request": "launch",
             "projectPath": "${workspaceFolder}/src/DeepSeekAgentMCP/DeepSeekAgentMCP.csproj"
-        }
+        },
+
     ]
 }
