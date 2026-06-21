@@ -8,4 +8,5 @@ Exemplo:
 * Listar toda a hierarquia de recursos da tarefa codigo = '001.01.09' da planilha de atividades do projeto codigo = '0000' e coligada 1.
 * Quais são os top 10 clientes inadimplentes de vendas de imóveis ?
 * Quais são os top 10 clientes inadimplentes de aluguel de imóveis ?
-* Quais são os top 10 alunos inadimplentes do ensino básico ?
+* Quais são os top 10 alunos do ensino básico inadimplentes ?
+* Quais são os top 10 alunos do ensino superior inadimplentes ?
