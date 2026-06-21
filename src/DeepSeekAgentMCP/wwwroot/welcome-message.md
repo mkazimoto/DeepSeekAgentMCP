@@ -9,4 +9,4 @@ Exemplo:
 * Quais são os top 10 clientes de vendas de imóveis inadimplentes na coligada 1 ?
 * Quais são os top 10 clientes de aluguel de imóveis inadimplentes na coligada 1 ?
 * Quais são os top 10 alunos do ensino básico inadimplentes na coligada 6 ?
-* Quais são os top 10 alunos do ensino superior inadimplentes na coligada 7?
+* Quais são os top 10 alunos do ensino superior inadimplentes na coligada 1 ?
