@@ -66,6 +66,8 @@ public class McpToolManager : IAsyncDisposable
     private readonly object _clientsLock = new();
     private readonly string _configPath;
     private readonly ConcurrentDictionary<string, int> _failureCounts = new();
+    private readonly ConcurrentDictionary<string, McpServerConfig> _allServerConfigs = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTime> _nextRetryTime = new(StringComparer.Ordinal);
     private Timer? _healthCheckTimer;
     private readonly int _maxConsecutiveFailures = 3;
     private readonly TimeSpan _healthCheckInterval = TimeSpan.FromSeconds(10);
@@ -96,6 +98,12 @@ public class McpToolManager : IAsyncDisposable
         var json = await File.ReadAllTextAsync(_configPath, cancellationToken);
         var config = JsonSerializer.Deserialize<McpServersConfig>(json);
         if (config == null) return;
+
+        // Store all configured servers for later retry attempts
+        foreach (var serverConfig in config.McpServers.Where(s => s.Enabled))
+        {
+            _allServerConfigs[serverConfig.Name] = serverConfig;
+        }
 
         foreach (var serverConfig in config.McpServers.Where(s => s.Enabled))
         {
@@ -176,6 +184,7 @@ public class McpToolManager : IAsyncDisposable
 
     /// <summary>
     /// Starts periodic health check loop with automatic reconnection.
+    /// Reconnection uses exponential backoff to avoid hammering a down server.
     /// </summary>
     private void StartHealthCheckLoop()
     {
@@ -186,6 +195,9 @@ public class McpToolManager : IAsyncDisposable
         {
             if (shutdownToken.IsCancellationRequested) return;
 
+            // ──────────────────────────────────────────────────
+            // 1. Health check on connected servers
+            // ──────────────────────────────────────────────────
             List<McpClientWrapper> snapshot;
             lock (_clientsLock)
             {
@@ -210,7 +222,7 @@ public class McpToolManager : IAsyncDisposable
                         Console.WriteLine($"[MCP] Initiating reconnection for '{wrapper.ServerName}'...");
                         _failureCounts.TryRemove(wrapper.ServerName, out int _);
 
-                        // Remove failed client
+                        // Remove failed client from active list
                         McpClient? oldClient = null;
                         McpServerConfig? serverConfig = null;
                         lock (_clientsLock)
@@ -224,21 +236,106 @@ public class McpToolManager : IAsyncDisposable
                             }
                         }
 
-                        // Reconnect
                         if (serverConfig != null)
                         {
                             await ConnectServerAsync(serverConfig, CancellationToken.None);
-                        }
 
-                        // Dispose old client after replacement
-                        if (oldClient != null)
-                        {
-                            try { await oldClient.DisposeAsync(); } catch { }
+                            // Check if reconnection succeeded
+                            bool reconnected;
+                            lock (_clientsLock)
+                            {
+                                reconnected = _clients.Any(w => string.Equals(w.ServerName, wrapper.ServerName, StringComparison.Ordinal));
+                            }
+
+                            if (reconnected)
+                            {
+                                Console.WriteLine($"[MCP] Reconnected to '{wrapper.ServerName}' successfully.");
+                                InvalidateToolCache();
+
+                                // Dispose old client only after successful replacement
+                                if (oldClient != null)
+                                {
+                                    try { await oldClient.DisposeAsync(); } catch { }
+                                }
+                            }
+                            else
+                            {
+                                // Reconnection failed — schedule retry with backoff
+                                var backoff = GetRetryBackoff(wrapper.ServerName);
+                                _nextRetryTime[wrapper.ServerName] = DateTime.UtcNow.Add(backoff);
+                                Console.WriteLine($"[MCP] Reconnection failed for '{wrapper.ServerName}', will retry in {backoff.TotalSeconds}s.");
+                            }
                         }
                     }
                 }
             }
+
+            // ──────────────────────────────────────────────────
+            // 2. Retry servers that are configured but not connected
+            // ──────────────────────────────────────────────────
+            foreach (var kvp in _allServerConfigs)
+            {
+                var serverName = kvp.Key;
+                var serverConfig = kvp.Value;
+
+                // Skip if already connected
+                bool alreadyConnected;
+                lock (_clientsLock)
+                {
+                    alreadyConnected = _clients.Any(w => string.Equals(w.ServerName, serverName, StringComparison.Ordinal));
+                }
+                if (alreadyConnected) continue;
+
+                // Respect backoff
+                if (_nextRetryTime.TryGetValue(serverName, out var retryUntil) && DateTime.UtcNow < retryUntil)
+                    continue;
+
+                Console.WriteLine($"[MCP] Attempting to (re)connect '{serverName}'...");
+                await ConnectServerAsync(serverConfig, CancellationToken.None);
+
+                bool reconnected;
+                lock (_clientsLock)
+                {
+                    reconnected = _clients.Any(w => string.Equals(w.ServerName, serverName, StringComparison.Ordinal));
+                }
+
+                if (reconnected)
+                {
+                    Console.WriteLine($"[MCP] Successfully (re)connected '{serverName}'.");
+                    _nextRetryTime.TryRemove(serverName, out DateTime _);
+                    _failureCounts.TryRemove(serverName, out int _);
+                    InvalidateToolCache();
+                }
+                else
+                {
+                    var backoff = GetRetryBackoff(serverName);
+                    _nextRetryTime[serverName] = DateTime.UtcNow.Add(backoff);
+                    Console.WriteLine($"[MCP] (Re)connection failed for '{serverName}', will retry in {backoff.TotalSeconds}s.");
+                }
+            }
         }, null, _healthCheckInterval, _healthCheckInterval);
+    }
+
+    /// <summary>
+    /// Returns exponential backoff for retry attempts (10s, 30s, 60s, 120s... capped at 5 min).
+    /// </summary>
+    private TimeSpan GetRetryBackoff(string serverName)
+    {
+        // Count how many times we've attempted retries (from failureCounts or by checking nextRetryTime history)
+        // Simple approach: fixed backoff that grows with retry count
+        if (!_failureCounts.TryGetValue(serverName, out var failures))
+            failures = 0;
+
+        // Increment failure tracking for backoff calculation
+        failures = _failureCounts.AddOrUpdate(serverName, 1, (_, c) => c + 1);
+
+        return failures switch
+        {
+            1 => TimeSpan.FromSeconds(10),
+            2 => TimeSpan.FromSeconds(30),
+            3 => TimeSpan.FromSeconds(60),
+            _ => TimeSpan.FromMinutes(5)
+        };
     }
 
     /// <summary>
@@ -459,6 +556,14 @@ public class McpToolManager : IAsyncDisposable
             return null;
 
         return System.Text.Json.Nodes.JsonNode.Parse(schema.Value.GetRawText());
+    }
+
+    /// <summary>
+    /// Gets the list of all configured server names (connected or not).
+    /// </summary>
+    public IReadOnlyCollection<string> GetAllConfiguredServerNames()
+    {
+        return _allServerConfigs.Keys.ToList().AsReadOnly();
     }
 
     public async ValueTask DisposeAsync()
