@@ -82,7 +82,7 @@ public static class WebAppExtensions
             {
                 // User is not authenticated via Google cookie
                 httpContext.Response.Headers.WWWAuthenticate = "Bearer";
-                return Results.Json(new { error = "Unauthorized. Please sign in with Google first." }, statusCode: 401);
+                return Results.Json(new { error = "Unauthorized. Please sign in with Google first.", code = "AUTH_REQUIRED" }, statusCode: 401);
             }
 
             httpContext.Response.Headers.WWWAuthenticate = "Bearer";

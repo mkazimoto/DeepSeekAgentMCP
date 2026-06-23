@@ -288,6 +288,13 @@ class ChatApp {
         try {
             const response = await fetch('/api/status');
             const data = await response.json();
+
+            // Se o servidor retornar código de não autorizado, faz logout automático
+            if (data?.code === 'AUTH_REQUIRED') {
+                this.logout();
+                return;
+            }
+
             this.renderMcpStatus(data);
             if (data.model) {
                 this.elements.modelName.textContent = data.model;
