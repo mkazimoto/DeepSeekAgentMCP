@@ -135,7 +135,7 @@ class ChatApp {
 
     async logout() {
         try {
-            await fetch('/api/auth/logout', { method: 'POST' });
+            await fetch(`/api/auth/logout?sessionId=${encodeURIComponent(this.sessionId)}`, { method: 'POST' });
             window.location.reload();
         } catch {
             window.location.reload();

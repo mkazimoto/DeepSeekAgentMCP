@@ -206,6 +206,15 @@ public class SessionManager : IAsyncDisposable
     public int ActiveSessionCount => _sessions.Count;
 
     /// <summary>
+    /// Gets the count of unique connected clients (distinct IPs with active sessions).
+    /// </summary>
+    public int UniqueClientCount => _sessions.Values
+        .Select(s => s.ClientIp)
+        .Where(ip => !string.IsNullOrEmpty(ip))
+        .Distinct(StringComparer.Ordinal)
+        .Count();
+
+    /// <summary>
     /// Gets the number of sessions associated with a given client IP.
     /// </summary>
     public int GetSessionCountForIp(string clientIp)

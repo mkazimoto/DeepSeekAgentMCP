@@ -236,7 +236,8 @@ public static class WebAppExtensions
             {
                 status = "healthy",
                 timestamp = DateTime.UtcNow,
-                activeSessions = sessionManager.ActiveSessionCount
+                activeSessions = sessionManager.ActiveSessionCount,
+                connectedUsers = sessionManager.UniqueClientCount
             });
         });
 
@@ -350,10 +351,16 @@ public static class WebAppExtensions
                 }
             });
 
-            // POST /api/auth/logout — sign out
-            app.MapPost("/api/auth/logout", async (HttpContext httpContext) =>
+            // POST /api/auth/logout — sign out and close session
+            app.MapPost("/api/auth/logout", async (HttpContext httpContext, string? sessionId) =>
             {
                 await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+                if (!string.IsNullOrEmpty(sessionId) && sessionId.Length <= 100)
+                {
+                    sessionManager.RemoveSession(sessionId);
+                }
+
                 return Results.Ok(new { success = true });
             });
         }
