@@ -216,7 +216,8 @@ public static class AgentHostBuilder
                 : 30,
             SummarizeHistory = doc.RootElement.TryGetProperty("SummarizeHistory", out var summarizeProp) && summarizeProp.GetBoolean(),
             GoogleAuth = googleAuth,
-            ApiCommunicationLogPath = ResolveApiLogPath(doc)
+            ApiCommunicationLogPath = ResolveApiLogPath(doc),
+            UserLogPath = ResolveUserLogPath(doc)
         };
     }
 
@@ -287,6 +288,7 @@ public static class AgentHostBuilder
         SessionManager sessionManager,
         McpToolManager mcpManager,
         AgentConfig config,
+        UserLogger? userLogger = null,
         ILogger? logger = null)
     {
         var contentRoot = PathHelper.FindContentRoot();
@@ -404,7 +406,7 @@ public static class AgentHostBuilder
 
         app.UseStaticFiles();
 
-        app.MapAgentEndpoints(sessionManager, mcpManager, config, logger);
+        app.MapAgentEndpoints(sessionManager, mcpManager, config, userLogger, logger);
 
         return app;
     }
@@ -423,6 +425,33 @@ public static class AgentHostBuilder
             return null;
 
         var contentRoot = PathHelper.FindContentRoot();
+        return Path.GetFullPath(Path.Combine(contentRoot, relativePath));
+    }
+
+    /// <summary>
+    /// Resolves the user activity log directory from config, making it absolute using the content root.
+    /// Defaults to "logs" (directory) if enabled but not specified.
+    /// The UserLogger will create daily files inside this directory (user-log-YYYY-MM-DD.json).
+    /// Returns null if logging is disabled.
+    /// </summary>
+    private static string? ResolveUserLogPath(JsonDocument doc)
+    {
+        if (!doc.RootElement.TryGetProperty("UserLog", out var userLogProp))
+            return null;
+
+        var enabled = userLogProp.TryGetProperty("Enabled", out var enabledProp) && enabledProp.GetBoolean();
+        if (!enabled)
+            return null;
+
+        var relativePath = userLogProp.TryGetProperty("LogPath", out var pathProp)
+            ? pathProp.GetString()
+            : null;
+
+        var contentRoot = PathHelper.FindContentRoot();
+
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return Path.GetFullPath(Path.Combine(contentRoot, "logs"));
+
         return Path.GetFullPath(Path.Combine(contentRoot, relativePath));
     }
 

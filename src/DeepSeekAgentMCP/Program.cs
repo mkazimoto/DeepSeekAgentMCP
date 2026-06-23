@@ -119,8 +119,11 @@ static async Task RunAsConsoleAsync(bool isService)
     // --- Start Web Server or Console Mode ---
     if (config.WebEnabled)
     {
-        var sessionManager = new SessionManager(deepSeekClient, mcpManager);
-        await RunWebServerAsync(sessionManager, mcpManager, config, isService);
+        using var userLogger = !string.IsNullOrEmpty(config.UserLogPath)
+            ? new UserLogger(config.UserLogPath)
+            : null;
+        var sessionManager = new SessionManager(deepSeekClient, mcpManager, userLogger);
+        await RunWebServerAsync(sessionManager, mcpManager, config, userLogger, isService);
     }
     else
     {
@@ -131,13 +134,13 @@ static async Task RunAsConsoleAsync(bool isService)
 // ===================================================================
 //  Web Server Mode (ASP.NET Core Minimal API)
 // ===================================================================
-static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, AgentConfig config, bool isService)
+static async Task RunWebServerAsync(SessionManager sessionManager, McpToolManager mcpManager, AgentConfig config, UserLogger? userLogger, bool isService)
 {
     Console.ForegroundColor = ConsoleColor.Green;
     Console.WriteLine($"\n Starting web interface at {config.WebUrls}");
     Console.ResetColor();
 
-    var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config);
+    var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config, userLogger: userLogger);
 
     // Only launch browser in development/local environment, never in service or production mode
     var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Development";

@@ -14,14 +14,16 @@ public class SessionManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new(StringComparer.Ordinal);
     private readonly DeepSeekClient _deepSeekClient;
     private readonly McpToolManager _mcpToolManager;
+    private readonly UserLogger? _userLogger;
     private readonly Timer _cleanupTimer;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(30);
     private bool _disposed;
 
-    public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager)
+    public SessionManager(DeepSeekClient deepSeekClient, McpToolManager mcpToolManager, UserLogger? userLogger = null)
     {
         _deepSeekClient = deepSeekClient;
         _mcpToolManager = mcpToolManager;
+        _userLogger = userLogger;
 
         // Cleanup stale sessions every 15 minutes
         _cleanupTimer = new Timer(_ => CleanupStaleSessions(), null, TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(15));
@@ -185,6 +187,7 @@ public class SessionManager : IAsyncDisposable
         if (_sessions.TryRemove(sessionId, out var state))
         {
             Console.WriteLine($"[Session] Removed session: {sessionId}");
+            _userLogger?.LogEvent(UserLogEvents.SessionRemoved, sessionId: sessionId, clientIp: state.ClientIp, detail: $"Created: {state.CreatedAt:O}");
 
             // Remove e dispose do semáforo da sessão
             if (_sessionLocks.TryRemove(sessionId, out var sessionLock))
@@ -238,6 +241,7 @@ public class SessionManager : IAsyncDisposable
         return _sessions.GetOrAdd(sessionId, id =>
         {
             Console.WriteLine($"[Session] Created new session: {id}");
+            _userLogger?.LogEvent(UserLogEvents.SessionCreated, clientIp: clientIp, sessionId: id, detail: $"IP: {clientIp ?? "unknown"}");
             return new SessionState
             {
                 Agent = new DeepSeekAgent(_deepSeekClient, _mcpToolManager),
@@ -261,6 +265,7 @@ public class SessionManager : IAsyncDisposable
             if (_sessions.TryRemove(id, out var state))
             {
                 Console.WriteLine($"[Session] Cleaned up stale session: {id}");
+                _userLogger?.LogEvent(UserLogEvents.SessionCleaned, sessionId: id, clientIp: state.ClientIp, detail: $"LastAccess: {state.LastAccess:O}");
 
                 // Remove e dispose do semáforo da sessão
                 if (_sessionLocks.TryRemove(id, out var sessionLock))

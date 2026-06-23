@@ -6,7 +6,7 @@ public class SessionManagerTests
 {
     private static SessionManager CreateManager()
     {
-        return new SessionManager(new FakeDeepSeekClient(), new FakeMcpToolManager());
+        return new SessionManager(new FakeDeepSeekClient(), new FakeMcpToolManager(), userLogger: null);
     }
 
     [Fact]

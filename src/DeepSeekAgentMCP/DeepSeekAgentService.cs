@@ -57,14 +57,19 @@ public class DeepSeekAgentService : BackgroundService
             });
             var deepSeekClient = AgentHostBuilder.CreateClient(config, loggerFactory);
             var mcpManager = await AgentHostBuilder.CreateMcpManagerAsync(config, stoppingToken);
-            var sessionManager = new SessionManager(deepSeekClient, mcpManager);
 
-            _logger.LogInformation("MCP initialized successfully.");
+            using var userLogger = !string.IsNullOrEmpty(config.UserLogPath)
+                ? new UserLogger(config.UserLogPath)
+                : null;
+
+            var sessionManager = new SessionManager(deepSeekClient, mcpManager, userLogger);
+
+            _logger.LogInformation("MCP initialized successfully. User logging: {UserLogStatus}", userLogger != null ? "enabled" : "disabled");
 
             // --- Start Web Server via AgentHostBuilder ---
             _logger.LogInformation("Starting web interface at {Urls}", config.WebUrls);
 
-            var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config, _logger);
+            var app = AgentHostBuilder.BuildWebApplication(sessionManager, mcpManager, config, userLogger, _logger);
 
             _logger.LogInformation("DeepSeek Agent Service started successfully. Active sessions: {Count}", sessionManager.ActiveSessionCount);
 

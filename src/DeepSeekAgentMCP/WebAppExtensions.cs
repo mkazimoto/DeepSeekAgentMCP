@@ -34,9 +34,10 @@ public static class WebAppExtensions
         SessionManager sessionManager,
         McpToolManager mcpManager,
         AgentConfig config,
+        UserLogger? userLogger = null,
         ILogger? logger = null)
     {
-        return MapAgentEndpoints(app, sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, config.RequireAuth, config.AuthToken, config.MaxSessionsPerIp, logger, config.GoogleAuth);
+        return MapAgentEndpoints(app, sessionManager, mcpManager, config.Model, config.RateLimitPerMinute, config.RequireAuth, config.AuthToken, config.MaxSessionsPerIp, logger, config.GoogleAuth, userLogger);
     }
 
     /// <summary>
@@ -52,7 +53,8 @@ public static class WebAppExtensions
         string? authToken,
         int maxSessionsPerIp,
         ILogger? logger = null,
-        GoogleAuthConfig? googleAuth = null)
+        GoogleAuthConfig? googleAuth = null,
+        UserLogger? userLogger = null)
     {
         var googleAuthEnabled = googleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 };
 
@@ -96,6 +98,10 @@ public static class WebAppExtensions
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
+            var (userName, userEmail) = GetUserInfo(httpContext);
+            var clientIp = GetClientIp(httpContext);
+            var sessionId = GetSessionId(request);
+
             // --- Validações básicas ---
             if (string.IsNullOrWhiteSpace(request.Message))
                 return Results.BadRequest(new { error = "Message is required." });
@@ -107,10 +113,10 @@ public static class WebAppExtensions
                 return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
 
             // --- Rate limiting por IP ---
-            var clientIp = GetClientIp(httpContext);
             if (!_chatRateLimiter.Value.TryConsume(clientIp))
             {
                 logger?.LogWarning("Rate limit exceeded for IP: {ClientIp}", clientIp);
+                userLogger?.LogEvent(UserLogEvents.RateLimitExceeded, userName, userEmail, sessionId, clientIp);
                 var retryAfter = TimeSpan.FromMinutes(1);
                 httpContext.Response.Headers.RetryAfter = retryAfter.TotalSeconds.ToString();
                 return Results.Json(
@@ -119,13 +125,13 @@ public static class WebAppExtensions
             }
 
             // --- Limite de sessões por IP ---
-            var sessionId = GetSessionId(request);
             if (!string.IsNullOrEmpty(clientIp) && clientIp != "unknown" && clientIp != "::1")
             {
                 var sessionCount = sessionManager.GetSessionCountForIp(clientIp);
                 if (sessionCount >= maxSessionsPerIp && !sessionManager.SessionExists(sessionId))
                 {
                     logger?.LogWarning("Session limit exceeded for IP: {ClientIp} ({Count}/{Max})", clientIp, sessionCount, maxSessionsPerIp);
+                    userLogger?.LogEvent(UserLogEvents.SessionLimitExceeded, userName, userEmail, sessionId, clientIp, $"Count={sessionCount}, Max={maxSessionsPerIp}");
                     return Results.Json(
                         new { error = $"Too many active sessions from this IP. Maximum is {maxSessionsPerIp}. Please clear an existing session or wait for cleanup." },
                         statusCode: (int)HttpStatusCode.TooManyRequests);
@@ -143,6 +149,8 @@ public static class WebAppExtensions
             {
                 var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, ct);
 
+                userLogger?.LogEvent(UserLogEvents.MessageSent, userName, userEmail, sessionId, clientIp, $"Message length: {sanitizedMessage.Length}");
+
                 // NOTA: A resposta NÃO passa por SanitizeForDisplay aqui porque:
                 // 1. A serialização JSON já faz escape de caracteres HTML automaticamente
                 // 2. O marked.parse() no frontend já renderiza HTML com segurança
@@ -157,6 +165,7 @@ public static class WebAppExtensions
             catch (Exception ex)
             {
                 logger?.LogError(ex, "Error processing chat message");
+                userLogger?.LogEvent(UserLogEvents.Error, userName, userEmail, sessionId, clientIp, $"Chat error: {ex.Message}");
                 return Results.Json(new { error = "An internal error occurred processing your message." }, statusCode: 500);
             }
         });
@@ -208,7 +217,9 @@ public static class WebAppExtensions
                 return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
 
             var sessionId = GetSessionId(request);
+            var (userName, userEmail) = GetUserInfo(httpContext);
             sessionManager.CancelRequest(sessionId);
+            userLogger?.LogEvent(UserLogEvents.RequestCancelled, userName, userEmail, sessionId, GetClientIp(httpContext));
             return Results.Ok(new { success = true });
         });
 
@@ -222,7 +233,9 @@ public static class WebAppExtensions
                 return Results.BadRequest(new { error = "SessionId exceeds maximum length of 100 characters." });
 
             var sessionId = GetSessionId(request);
+            var (userName, userEmail) = GetUserInfo(httpContext);
             await sessionManager.ClearConversationAsync(sessionId);
+            userLogger?.LogEvent(UserLogEvents.SessionCleared, userName, userEmail, sessionId, GetClientIp(httpContext));
             return Results.Ok(new { success = true });
         });
 
@@ -243,6 +256,9 @@ public static class WebAppExtensions
         // ============================================================
         if (googleAuthEnabled)
         {
+            // Login tracking set to avoid duplicate login logs per user per session
+            var _loggedInUsers = new System.Collections.Concurrent.ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+
             // GET /api/auth/status — check current authentication status
             app.MapGet("/api/auth/status", (HttpContext httpContext) =>
             {
@@ -261,11 +277,21 @@ public static class WebAppExtensions
                         ? $"/api/auth/profile-picture?v={loginTimestamp}"
                         : null;
 
+                    var email = user.FindFirst(ClaimTypes.Email)?.Value;
+                    var name = user.FindFirst(ClaimTypes.Name)?.Value;
+
+                    // Log login event once per user per login session
+                    var loginKey = $"{email ?? "unknown"}_{loginTimestamp}";
+                    if (_loggedInUsers.TryAdd(loginKey, 0))
+                    {
+                        userLogger?.LogEvent(UserLogEvents.Login, name, email, null, GetClientIp(httpContext));
+                    }
+
                     return Results.Ok(new
                     {
                         authenticated = true,
-                        name = user.FindFirst(ClaimTypes.Name)?.Value,
-                        email = user.FindFirst(ClaimTypes.Email)?.Value,
+                        name,
+                        email,
                         picture = pictureUrl
                     });
                 }
@@ -351,7 +377,12 @@ public static class WebAppExtensions
             // POST /api/auth/logout — sign out and close session
             app.MapPost("/api/auth/logout", async (HttpContext httpContext, string? sessionId) =>
             {
+                var (userName, userEmail) = GetUserInfo(httpContext);
+                var clientIp = GetClientIp(httpContext);
+
                 await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+                userLogger?.LogEvent(UserLogEvents.Logout, userName, userEmail, sessionId, clientIp);
 
                 if (!string.IsNullOrEmpty(sessionId) && sessionId.Length <= 100)
                 {
@@ -367,9 +398,55 @@ public static class WebAppExtensions
             app.MapGet("/api/auth/status", () => Results.Ok(new { authenticated = false, authDisabled = true }));
         }
 
+        // GET /api/user-log — recent user activity log entries (protegido por auth)
+        app.MapGet("/api/user-log", (HttpContext httpContext, int? count) =>
+        {
+            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
+            if (authResult != null) return authResult;
+
+            if (userLogger == null)
+                return Results.Ok(new { enabled = false, entries = Array.Empty<object>() });
+
+            var maxEntries = Math.Clamp(count ?? 100, 1, 1000);
+            var bufferEntries = userLogger.GetRecentLogs(maxEntries);
+
+            // Also try to read from disk for a more complete view
+            var diskEntries = userLogger.ReadFromDisk(maxEntries);
+
+            // Merge: buffer entries (newest) + disk entries (older), deduplicated by timestamp
+            var merged = bufferEntries
+                .Concat(diskEntries)
+                .DistinctBy(e => (e.Timestamp, e.Event, e.User, e.Detail))
+                .OrderByDescending(e => e.Timestamp)
+                .Take(maxEntries)
+                .ToList();
+
+            return Results.Ok(new
+            {
+                enabled = true,
+                totalBuffered = userLogger.BufferedCount,
+                entries = merged
+            });
+        });
+
         app.MapFallbackToFile("index.html");
 
         return app;
+    }
+
+    /// <summary>
+    /// Extracts user name and email from the authenticated HttpContext.
+    /// </summary>
+    private static (string? Name, string? Email) GetUserInfo(HttpContext httpContext)
+    {
+        var user = httpContext.User;
+        if (user.Identity?.IsAuthenticated != true)
+            return (null, null);
+
+        return (
+            user.FindFirst(ClaimTypes.Name)?.Value,
+            user.FindFirst(ClaimTypes.Email)?.Value
+        );
     }
 
     internal static string GetSessionId(ChatRequest request)

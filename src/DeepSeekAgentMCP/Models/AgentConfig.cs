@@ -77,4 +77,7 @@ public record AgentConfig
 
     /// <summary>Path to log DeepSeek API request/response communication (optional). Leave null/empty to disable.</summary>
     public string? ApiCommunicationLogPath { get; init; }
+
+    /// <summary>Path to log user activity (optional). Leave null/empty to disable file logging (in-memory only).</summary>
+    public string? UserLogPath { get; init; }
 }
