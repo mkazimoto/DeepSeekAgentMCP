@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logs de Usuário - Agente SQL</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Login Overlay (Google Auth) -->
+    <div class="login-overlay" id="login-overlay" style="display:none">
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="assets/robo.png" width="48" height="48" alt="Robô Assistente" style="border-radius: 10px" />
+            </div>
+            <h1 class="login-title">Logs de Atividade do Usuário</h1>
+            <p class="login-subtitle">Faça login com sua conta Google para acessar os logs</p>
+            <button class="google-signin-btn" id="google-signin-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Entrar com Google
+            </button>
+            <p class="login-footer-text">Apenas usuários autorizados podem acessar este sistema</p>
+        </div>
+    </div>
+
+    <div class="logs-app-container">
+        <!-- Logs Header -->
+        <header class="logs-header">
+            <div class="logs-header-left">
+                <a href="/" class="logs-back-link" title="Voltar ao Chat">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                    Chat
+                </a>
+                <div class="logs-header-info">
+                    <h1 class="logs-title">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                        Logs de Atividade
+                    </h1>
+                    <span class="logs-subtitle" id="logs-subtitle">Registro de atividades dos usuários</span>
+                </div>
+            </div>
+            <div class="logs-header-actions">
+                <span class="logs-badge" id="logs-count-badge">0 entradas</span>
+                <button class="icon-btn" id="theme-toggle-logs" title="Alternar tema">
+                    <svg class="theme-icon-sun" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M10 1V3M10 17V19M19 10H17M3 10H1M16.66 3.34L15.24 4.76M4.76 15.24L3.34 16.66M16.66 16.66L15.24 15.24M4.76 4.76L3.34 3.34" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <svg class="theme-icon-moon" width="20" height="20" viewBox="0 0 20 20" fill="none" style="display:none">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <div class="logs-filters">
+            <div class="logs-filter-row">
+                <div class="logs-filter-group">
+                    <label class="logs-filter-label" for="filter-event">Evento</label>
+                    <select id="filter-event" class="logs-filter-select">
+                        <option value="">Todos os eventos</option>
+                        <option value="login">Login</option>
+                        <option value="logout">Logout</option>
+                        <option value="message_sent">Mensagem enviada</option>
+                        <option value="session_created">Sessão criada</option>
+                        <option value="session_removed">Sessão removida</option>
+                        <option value="session_cleaned">Sessão limpa (cleanup)</option>
+                        <option value="session_cleared">Sessão limpa (clear)</option>
+                        <option value="request_cancelled">Requisição cancelada</option>
+                        <option value="rate_limit_exceeded">Rate limit excedido</option>
+                        <option value="session_limit_exceeded">Limite de sessões excedido</option>
+                        <option value="error">Erro</option>
+                    </select>
+                </div>
+                <div class="logs-filter-group">
+                    <label class="logs-filter-label" for="filter-search">Buscar</label>
+                    <div class="logs-search-wrapper">
+                        <svg class="logs-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" id="filter-search" class="logs-filter-input" placeholder="Usuário, email ou detalhes..." spellcheck="false">
+                    </div>
+                </div>
+                <div class="logs-filter-group">
+                    <label class="logs-filter-label" for="filter-limit">Qtd.</label>
+                    <select id="filter-limit" class="logs-filter-select logs-filter-select-small">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="250">250</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                    </select>
+                </div>
+                <div class="logs-filter-actions">
+                    <button class="logs-btn logs-btn-primary" id="btn-refresh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                        Atualizar
+                    </button>
+                    <button class="logs-btn logs-btn-secondary" id="btn-auto-refresh">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        Auto
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Table -->
+        <div class="logs-table-container" id="logs-table-container">
+            <div class="logs-loading" id="logs-loading">
+                <div class="spinner"></div>
+                <span>Carregando logs...</span>
+            </div>
+            <table class="logs-table" id="logs-table" style="display:none">
+                <thead>
+                    <tr>
+                        <th class="logs-th logs-th-sortable" data-sort="timestamp" data-order="desc">
+                            <span class="logs-th-inner">
+                                <span>Timestamp</span>
+                                <svg class="logs-sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </span>
+                        </th>
+                        <th class="logs-th logs-th-sortable" data-sort="event">
+                            <span class="logs-th-inner">
+                                <span>Evento</span>
+                                <svg class="logs-sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </span>
+                        </th>
+                        <th class="logs-th logs-th-sortable" data-sort="user">
+                            <span class="logs-th-inner">
+                                <span>Usuário</span>
+                                <svg class="logs-sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </span>
+                        </th>
+                        <th class="logs-th logs-th-sortable" data-sort="email">
+                            <span class="logs-th-inner">
+                                <span>Email</span>
+                                <svg class="logs-sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                            </span>
+                        </th>
+                        <th class="logs-th">Sessão</th>
+                        <th class="logs-th">IP</th>
+                        <th class="logs-th logs-th-expand">Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-tbody"></tbody>
+            </table>
+            <div class="logs-empty" id="logs-empty" style="display:none">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <p>Nenhum log encontrado.</p>
+            </div>
+            <div class="logs-error" id="logs-error" style="display:none">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                <p id="logs-error-msg">Erro ao carregar logs.</p>
+                <button class="logs-btn logs-btn-primary" id="btn-retry">Tentar novamente</button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="logs-footer">
+            <span id="logs-footer-info">Nenhum dado carregado.</span>
+            <button class="logs-btn-logs-link" id="btn-export" title="Copiar logs como JSON">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exportar JSON
+            </button>
+        </div>
+    </div>
+
+    <script src="js/logs.js"></script>
+</body>
+</html>
