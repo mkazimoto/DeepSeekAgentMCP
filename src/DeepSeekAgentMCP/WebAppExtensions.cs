@@ -147,7 +147,7 @@ public static class WebAppExtensions
 
             try
             {
-                var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, ct);
+                var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, userName, userEmail, ct);
 
                 userLogger?.LogEvent(UserLogEvents.MessageSent, userName, userEmail, sessionId, clientIp, $"Message length: {sanitizedMessage.Length}");
 

@@ -32,14 +32,14 @@ public class SessionManager : IAsyncDisposable
     /// <summary>
     /// Processes a user message in the specified session and returns the agent's response.
     /// </summary>
-    public async Task<string> ProcessMessageAsync(string sessionId, string userMessage, string? clientIp = null, CancellationToken cancellationToken = default)
+    public async Task<string> ProcessMessageAsync(string sessionId, string userMessage, string? clientIp = null, string? user = null, string? email = null, CancellationToken cancellationToken = default)
     {
         var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
         await sessionLock.WaitAsync(cancellationToken);
 
         try
         {
-            var state = GetOrCreateSession(sessionId, clientIp);
+            var state = GetOrCreateSession(sessionId, clientIp, user, email);
 
             // Create a CancellationTokenSource linked to the caller's token
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -78,6 +78,8 @@ public class SessionManager : IAsyncDisposable
         string sessionId, string userMessage,
         Action<string>? onChunk = null,
         string? clientIp = null,
+        string? user = null,
+        string? email = null,
         CancellationToken cancellationToken = default)
     {
         var sessionLock = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
@@ -85,7 +87,7 @@ public class SessionManager : IAsyncDisposable
 
         try
         {
-            var state = GetOrCreateSession(sessionId, clientIp);
+            var state = GetOrCreateSession(sessionId, clientIp, user, email);
 
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _activeRequests[sessionId] = cts;
@@ -236,12 +238,12 @@ public class SessionManager : IAsyncDisposable
         return _sessions.ContainsKey(sessionId);
     }
 
-    private SessionState GetOrCreateSession(string sessionId, string? clientIp = null)
+    private SessionState GetOrCreateSession(string sessionId, string? clientIp = null, string? user = null, string? email = null)
     {
         return _sessions.GetOrAdd(sessionId, id =>
         {
             Console.WriteLine($"[Session] Created new session: {id}");
-            _userLogger?.LogEvent(UserLogEvents.SessionCreated, clientIp: clientIp, sessionId: id, detail: $"IP: {clientIp ?? "unknown"}");
+            _userLogger?.LogEvent(UserLogEvents.SessionCreated, user: user, email: email, clientIp: clientIp, sessionId: id, detail: $"IP: {clientIp ?? "unknown"}");
             return new SessionState
             {
                 Agent = new DeepSeekAgent(_deepSeekClient, _mcpToolManager),
