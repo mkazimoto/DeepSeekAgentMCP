@@ -226,12 +226,9 @@ public static class WebAppExtensions
             return Results.Ok(new { success = true });
         });
 
-        // GET /api/health — liveness/readiness probe
+        // GET /api/health — liveness/readiness probe (público, sem auth)
         app.MapGet("/api/health", (HttpContext httpContext) =>
         {
-            var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
-            if (authResult != null) return authResult;
-
             return Results.Ok(new
             {
                 status = "healthy",

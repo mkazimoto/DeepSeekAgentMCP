@@ -15,6 +15,7 @@ class ChatApp {
                 return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
             });
         this._statusPollInterval = null;
+        this._healthPollInterval = null;
         this.initElements();
         this.initEventListeners();
         this.initTheme();
@@ -36,6 +37,7 @@ class ChatApp {
                 await this.restoreWelcomeMessage();
                 this.loadMcpStatus();
                 this.startStatusPolling();
+                this.startHealthPolling();
                 this.autoResizeTextarea();
                 this.showUserInfo(data);
             } else if (data.authDisabled) {
@@ -45,6 +47,7 @@ class ChatApp {
                 await this.restoreWelcomeMessage();
                 this.loadMcpStatus();
                 this.startStatusPolling();
+                this.startHealthPolling();
                 this.autoResizeTextarea();
             } else {
                 // Not authenticated — show login screen
@@ -59,6 +62,7 @@ class ChatApp {
             await this.restoreWelcomeMessage();
             this.loadMcpStatus();
             this.startStatusPolling();
+            this.startHealthPolling();
             this.autoResizeTextarea();
         }
     }
@@ -325,7 +329,34 @@ class ChatApp {
     /** Inicia polling periódico do status dos servidores MCP a cada 10 segundos */
     startStatusPolling() {
         if (this._statusPollInterval) clearInterval(this._statusPollInterval);
-        this._statusPollInterval = setInterval(() => this.loadMcpStatus(), 10_000);
+        this._statusPollInterval = setInterval(() => this.loadMcpStatus(), 10000);
+    }
+
+    // --- Health Metrics ---
+    async loadHealthMetrics() {
+        try {
+            const response = await fetch('/api/health');
+            const data = await response.json();
+
+            const sessionsEl = document.getElementById('health-active-sessions');
+            const usersEl = document.getElementById('health-active-users');
+
+            if (sessionsEl) {
+                sessionsEl.textContent = data.activeSessions ?? '—';
+            }
+            if (usersEl) {
+                usersEl.textContent = data.connectedUsers ?? '—';
+            }
+        } catch {
+            // Silently ignore — health check failures are not critical for UX
+        }
+    }
+
+    /** Inicia polling periódico das métricas de health a cada 10 segundos */
+    startHealthPolling() {
+        this.loadHealthMetrics();
+        if (this._healthPollInterval) clearInterval(this._healthPollInterval);
+        this._healthPollInterval = setInterval(() => this.loadHealthMetrics(), 10_000);
     }
 
     // --- Send Message ---
