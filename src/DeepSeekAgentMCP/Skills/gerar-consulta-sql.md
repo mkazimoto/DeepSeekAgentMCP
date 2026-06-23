@@ -82,7 +82,7 @@ O schema retorna:
 - **Índices** — para identificar chaves primárias
 
 > **Navegue pelos relacionamentos** para descobrir tabelas auxiliares necessárias (ex: tabelas de cadastro vinculadas via FK).
-
+> **Sempre filtre pela coluna status** caso a tabela possua uma coluna de status ou situação, inclua filtro por status, consultando os possíveis valores com a ferramenta `totvs_get_table_rules` (não invente valores caso não tenha a informação documentada).
 ---
 
 ### Passo 4 — Montar a Consulta
