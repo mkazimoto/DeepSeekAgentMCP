@@ -15,6 +15,10 @@ public class FakeMcpToolManager : McpToolManager
 
     public FakeMcpToolManager() : base("fake-config.json") { }
 
+    public bool SimulateConnected { get; set; } = true;
+
+    public override bool IsAnyServerConnected => SimulateConnected;
+
     public void SetToolDefinitions(List<ToolDefinition> definitions)
     {
         _toolDefinitions = definitions;

@@ -59,6 +59,30 @@ public class DeepSeekAgentTests
     }
 
     [Fact]
+    public async Task ProcessMessageAsync_WhenMcpOffline_ReturnsOfflineMessage()
+    {
+        var client = new FakeDeepSeekClient();
+        client.EnqueueResponse(MakeResponse("Should not be called"));
+        var mgr = new FakeMcpToolManager { SimulateConnected = false };
+        var agent = new DeepSeekAgent(client, mgr);
+
+        var result = await agent.ProcessMessageAsync("Hi");
+        Assert.Contains("não está conectado", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ProcessMessageStreamingAsync_WhenMcpOffline_ReturnsOfflineMessage()
+    {
+        var client = new FakeDeepSeekClient();
+        client.EnqueueResponse(MakeResponse("Should not be called"));
+        var mgr = new FakeMcpToolManager { SimulateConnected = false };
+        var agent = new DeepSeekAgent(client, mgr, streamingEnabled: false);
+
+        var result = await agent.ProcessMessageStreamingAsync("Hi");
+        Assert.Contains("não está conectado", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ProcessMessageAsync_NoToolCalls_ReturnsResponse()
     {
         var client = new FakeDeepSeekClient();
@@ -118,7 +142,7 @@ public class DeepSeekAgentTests
 
         var agent = new DeepSeekAgent(client, mgr, continueOnToolError: false);
         var result = await agent.ProcessMessageAsync("Run");
-        Assert.Contains("error", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("erro", result, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

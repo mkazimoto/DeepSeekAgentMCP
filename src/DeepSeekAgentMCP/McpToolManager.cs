@@ -566,6 +566,20 @@ public class McpToolManager : IAsyncDisposable
         return _allServerConfigs.Keys.ToList().AsReadOnly();
     }
 
+    /// <summary>
+    /// Indicates whether at least one MCP server is currently connected.
+    /// </summary>
+    public virtual bool IsAnyServerConnected
+    {
+        get
+        {
+            lock (_clientsLock)
+            {
+                return _clients.Count > 0;
+            }
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;

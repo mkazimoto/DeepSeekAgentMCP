@@ -86,6 +86,27 @@ public class DeepSeekAgent : IAsyncDisposable
     /// </summary>
     public async Task<string> ProcessMessageAsync(string userMessage, CancellationToken cancellationToken = default)
     {
+        // Reject if no MCP server is connected
+        if (!_mcpToolManager.IsAnyServerConnected)
+        {
+            var mcpOfflineMsg = "O servidor MCP não está conectado. Não é possível processar sua solicitação no momento.";
+            lock (_historyLock)
+            {
+                _conversationHistory.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = userMessage
+                });
+                _conversationHistory.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = mcpOfflineMsg
+                });
+                TrimConversationHistory();
+            }
+            return mcpOfflineMsg;
+        }
+
         // Add user message to history
         lock (_historyLock)
         {
@@ -215,6 +236,27 @@ public class DeepSeekAgent : IAsyncDisposable
     public async Task<string> ProcessMessageStreamingAsync(string userMessage, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Reject if no MCP server is connected
+        if (!_mcpToolManager.IsAnyServerConnected)
+        {
+            var mcpOfflineMsg = "O servidor MCP não está conectado. Não é possível processar sua solicitação no momento.";
+            lock (_historyLock)
+            {
+                _conversationHistory.Add(new ChatMessage
+                {
+                    Role = "user",
+                    Content = userMessage
+                });
+                _conversationHistory.Add(new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = mcpOfflineMsg
+                });
+                TrimConversationHistory();
+            }
+            return mcpOfflineMsg;
+        }
 
         lock (_historyLock)
         {
