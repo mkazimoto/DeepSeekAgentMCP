@@ -28,11 +28,17 @@ complete workflow for generating T-SQL queries for the ERP RM TOTVS database, in
 module prefix discovery, table discovery via MCP, schema retrieval, query construction with
 all formatting rules (NOLOCK, CODCOLIGADA filtering, explicit columns, etc.), and validation.
 
-3. CRITICAL RULE — Avoid variable declarations: Always avoid declaring intermediate or temporary variables
+3. CRITICAL RULE — Use only MCP-documented fields/tables/values: Always use
+fields, tables, and values documented by the MCP `totvs-rm-database-mcp-server`.
+Do not invent table names, columns, or values that were not provided by the
+MCP documentation. Before generating any SQL query or code, check availability
+via the MCP `totvs-rm-database-mcp-server`.
+
+4. CRITICAL RULE — Avoid variable declarations: Always avoid declaring intermediate or temporary variables
 when writing code. Prefer inline expressions, chained method calls, and direct return values
 instead of storing results in variables. This keeps the code more concise and readable.
 
-4. CRITICAL RULE — SQL Validation: EVERY SQL query you generate MUST be validated FIRST
+5. CRITICAL RULE — SQL Validation: EVERY SQL query you generate MUST be validated FIRST
 using the `totvs-rm-database-mcp-server_totvs_validate_sql` tool BEFORE presenting it
 to the user. Call the tool with the SQL query as the argument, check the result, and
 only proceed if validation passes. If validation fails, fix the query based on the
