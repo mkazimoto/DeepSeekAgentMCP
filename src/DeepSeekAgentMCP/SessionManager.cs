@@ -189,7 +189,7 @@ public class SessionManager : IAsyncDisposable
         if (_sessions.TryRemove(sessionId, out var state))
         {
             Console.WriteLine($"[Session] Removed session: {sessionId}");
-            _userLogger?.LogEvent(UserLogEvents.SessionRemoved, sessionId: sessionId, clientIp: state.ClientIp, detail: $"Created: {state.CreatedAt:O}");
+            _userLogger?.LogEvent(UserLogEvents.SessionRemoved, user: state.User, email: state.Email, sessionId: sessionId, clientIp: state.ClientIp, detail: $"Created: {state.CreatedAt:O}");
 
             // Remove e dispose do semáforo da sessão
             if (_sessionLocks.TryRemove(sessionId, out var sessionLock))
@@ -249,7 +249,9 @@ public class SessionManager : IAsyncDisposable
                 Agent = new DeepSeekAgent(_deepSeekClient, _mcpToolManager),
                 CreatedAt = DateTime.UtcNow,
                 LastAccess = DateTime.UtcNow,
-                ClientIp = clientIp
+                ClientIp = clientIp,
+                User = user,
+                Email = email
             };
         });
     }
@@ -267,7 +269,7 @@ public class SessionManager : IAsyncDisposable
             if (_sessions.TryRemove(id, out var state))
             {
                 Console.WriteLine($"[Session] Cleaned up stale session: {id}");
-                _userLogger?.LogEvent(UserLogEvents.SessionCleaned, sessionId: id, clientIp: state.ClientIp, detail: $"LastAccess: {state.LastAccess:O}");
+                _userLogger?.LogEvent(UserLogEvents.SessionCleaned, user: state.User, email: state.Email, sessionId: id, clientIp: state.ClientIp, detail: $"LastAccess: {state.LastAccess:O}");
 
                 // Remove e dispose do semáforo da sessão
                 if (_sessionLocks.TryRemove(id, out var sessionLock))
@@ -351,5 +353,7 @@ public class SessionManager : IAsyncDisposable
         public DateTime CreatedAt { get; set; }
         public DateTime LastAccess { get; set; }
         public string? ClientIp { get; set; }
+        public string? User { get; set; }
+        public string? Email { get; set; }
     }
 }
