@@ -84,8 +84,8 @@ function Install-Service {
     # Não é necessário Copy-Item manual para evitar duplicação de pastas.
 
     # Copy instructions.md to publish if not exists
-    $instructionsSrc = "$PSScriptRoot\..\src\DeepSeekAgentMCP\instructions.md"
-    $instructionsDst = "$PSScriptRoot\..\publish\instructions.md"
+    $instructionsSrc = "$PSScriptRoot\..\src\DeepSeekAgentMCP\instructions\instructions.md"
+    $instructionsDst = "$PSScriptRoot\..\publish\instructions\instructions.md"
     if (-not (Test-Path $instructionsDst)) {
         if (Test-Path $instructionsSrc) {
             Write-Info "Copiando instructions.md para publish..."

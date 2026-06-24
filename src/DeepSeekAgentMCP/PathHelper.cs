@@ -85,8 +85,8 @@ public static class PathHelper
     {
         var searchPaths = new[]
         {
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "instructions.md")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "instructions.md"))
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "instructions", "instructions.md")),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "instructions", "instructions.md"))
         };
 
         return searchPaths.FirstOrDefault(File.Exists);
