@@ -11,6 +11,7 @@ Exemplo:
 * Quais são os top 10 projetos de construção atrasados da coligada 1 ?
 * Quais são os top 10 clientes de vendas de imóveis inadimplentes na coligada 1 ?
 * Quais são os top 10 clientes de aluguel de imóveis inadimplentes na coligada 1 ?
+* Quais são os top 10 contratos de prestação de serviço a pagar com maior valor ?
 * Quais são os top 10 alunos do ensino básico com mais faltas da coligada 6 ?
 * Quais são os top 10 alunos do ensino superior com mais faltas da coligada 1 ?
 * Quais são os top 10 alunos do ensino básico com as maiores notas da coligada 6 ?
