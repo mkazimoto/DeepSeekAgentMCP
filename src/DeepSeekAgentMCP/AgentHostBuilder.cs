@@ -69,7 +69,7 @@ public static class AgentHostBuilder
         if (doc.RootElement.TryGetProperty("WebServer", out var webConfig))
         {
             webEnabled = webConfig.GetProperty("Enabled").GetBoolean();
-            webUrls = webConfig.GetProperty("Urls").GetString() ?? "http://localhost:5000";
+            webUrls = webConfig.GetProperty("Urls").GetString() ?? "http://0.0.0.0:5000";
             launchBrowser = webConfig.GetProperty("LaunchBrowser").GetBoolean();
         }
 
