@@ -276,8 +276,10 @@ public static class WebAppExtensions
                         ? $"/api/auth/profile-picture?v={loginTimestamp}"
                         : null;
 
-                    var email = user.FindFirst(ClaimTypes.Email)?.Value;
-                    var name = user.FindFirst(ClaimTypes.Name)?.Value;
+                    var email = user.FindFirst(ClaimTypes.Email)?.Value
+                        ?? user.FindFirst("email")?.Value;
+                    var name = user.FindFirst(ClaimTypes.Name)?.Value
+                        ?? user.FindFirst("name")?.Value;
 
                     // Log login event once per user per login session
                     var loginKey = $"{email ?? "unknown"}_{loginTimestamp}";
@@ -324,8 +326,10 @@ public static class WebAppExtensions
                 });
 
                 // Extract user info for response
-                var email = principal.FindFirst(ClaimTypes.Email)?.Value;
-                var name = principal.FindFirst(ClaimTypes.Name)?.Value;
+                var email = principal.FindFirst(ClaimTypes.Email)?.Value
+                    ?? principal.FindFirst("email")?.Value;
+                var name = principal.FindFirst(ClaimTypes.Name)?.Value
+                    ?? principal.FindFirst("name")?.Value;
                 var pictureClaim = principal.FindFirst("picture")?.Value;
 
                 var loginTimestamp = principal.FindFirst("login_timestamp")?.Value ?? "0";
@@ -469,6 +473,8 @@ public static class WebAppExtensions
 
     /// <summary>
     /// Extracts user name and email from the authenticated HttpContext.
+    /// Tenta múltiplos claim types porque o Google JWT pode usar nomes
+    /// diferentes dependendo da versão do ASP.NET Core / handler.
     /// </summary>
     private static (string? Name, string? Email) GetUserInfo(HttpContext httpContext)
     {
@@ -477,8 +483,10 @@ public static class WebAppExtensions
             return (null, null);
 
         return (
-            user.FindFirst(ClaimTypes.Name)?.Value,
+            user.FindFirst(ClaimTypes.Name)?.Value
+                ?? user.FindFirst("name")?.Value,
             user.FindFirst(ClaimTypes.Email)?.Value
+                ?? user.FindFirst("email")?.Value
         );
     }
 

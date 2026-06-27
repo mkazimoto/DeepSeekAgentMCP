@@ -262,19 +262,6 @@ class ChatApp {
             document.getElementById('logout-btn').addEventListener('click', () => this.logout());
         }
 
-        // Show header user avatar and logout button when authenticated
-        const headerAvatar = document.getElementById('header-user-avatar');
-        const headerImg = document.getElementById('header-user-img');
-        if (headerAvatar && headerImg && data.picture) {
-            headerImg.src = data.picture;
-            headerImg.alt = this.escapeHtml(data.name || '');
-            headerAvatar.style.display = '';
-        }
-
-        const headerLogout = document.getElementById('header-logout-btn');
-        if (headerLogout) {
-            headerLogout.style.display = '';
-        }
     }
 
     async logout() {
@@ -338,12 +325,6 @@ class ChatApp {
         document.querySelectorAll('.command-btn').forEach(btn => {
             btn.addEventListener('click', () => this.handleCommand(btn.dataset.command));
         });
-
-        // Header logout button
-        const headerLogoutBtn = document.getElementById('header-logout-btn');
-        if (headerLogoutBtn) {
-            headerLogoutBtn.addEventListener('click', () => this.logout());
-        }
 
         // Theme toggle
         this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
@@ -795,12 +776,19 @@ class ChatApp {
 
         // Load welcome text from markdown file
         let welcomeHtml = '';
+        const userName = this.userInfo?.name || '';
         try {
             const response = await fetch('welcome-message.md');
             const markdown = await response.text();
-            welcomeHtml = this.formatMessage(markdown);
+            const greeting = userName
+                ? `<p>👋 Bem vindo, <strong>${this.escapeHtml(userName)}</strong>!</p>\n\n`
+                : '';
+            welcomeHtml = greeting + this.formatMessage(markdown);
         } catch {
-            welcomeHtml = '<p>👋 Bem vindo! Sou o <strong>Assistente gerador de consulta SQL</strong>.</p>';
+            const greeting = userName
+                ? `👋 Bem vindo, <strong>${this.escapeHtml(userName)}</strong>! Sou o <strong>Assistente gerador de consulta SQL</strong>.`
+                : '👋 Bem vindo! Sou o <strong>Assistente gerador de consulta SQL</strong>.';
+            welcomeHtml = `<p>${greeting}</p>`;
         }
 
         div.innerHTML = `

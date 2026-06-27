@@ -1,4 +1,4 @@
-👋 Bem vindo! Sou o **Assistente gerador de consulta SQL**, especializado em gerar consultas SQL a partir das suas perguntas.
+Sou o **Assistente gerador de consulta SQL**, especializado em gerar consultas SQL a partir das suas perguntas.
 
 Exemplo:
 
