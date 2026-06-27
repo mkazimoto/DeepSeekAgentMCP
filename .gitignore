@@ -54,7 +54,6 @@ publish/
 config/*.local.json
 config/*.Development.json
 appsettings.*.local.json
-config/mcp-servers.json
 
 # OS generated
 .DS_Store
