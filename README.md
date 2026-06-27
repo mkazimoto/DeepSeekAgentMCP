@@ -11,7 +11,7 @@
 - ⚡ **Streaming** — Respostas em tempo real com streaming
 - 📜 **Histórico de conversação** — Mantém contexto entre mensagens
 - 🌐 **Interface Web** — Chat interativo via navegador com API REST
-- 🔐 **Autenticação Google OAuth** — Login com conta Google na interface web (desabilitado por padrão)
+- 🔐 **Autenticação Google (GIS)** — Login com conta Google via Google Identity Services na interface web (desabilitado por padrão)
 - 🖥️ **Windows Service** — Execução como serviço do Windows em segundo plano
 - 🛡️ **Health check com auto-reconnect** — Reconexão automática a servidores MCP com falha
 - ⚙️ **HttpClient pooling** — HttpClient reutilizável via construtor para evitar socket exhaustion
@@ -58,9 +58,11 @@ New-Item -Path $regPath -Force | Out-Null
 Set-ItemProperty -Path $regPath -Name "DEEPSEEK_API_KEY" -Value "sua-chave-aqui"
 ```
 
-### 1.1. Configurar Google OAuth (opcional)
+### 1.1. Configurar Google Auth via GIS (opcional)
 
-A interface web suporta login com Google. O Google Auth está **desabilitado por padrão** (`"Enabled": false` no `appsettings.json`).
+A interface web suporta login com Google via **Google Identity Services (GIS)** — autenticação client-side com popup, sem necessidade de `ClientSecret` no servidor.
+
+O Google Auth está **desabilitado por padrão** (`"Enabled": false` no `appsettings.json`).
 
 Para habilitar, edite `config/appsettings.json`:
 ```json
@@ -70,42 +72,58 @@ Para habilitar, edite `config/appsettings.json`:
 }
 ```
 
-As credenciais **devem** ser configuradas via variáveis de ambiente (fonte primária):
+#### Client ID obrigatório
 
+O `ClientId` é **obrigatório** e deve ser configurado em uma das seguintes fontes (ordem de precedência):
+
+| Prioridade | Fonte | Local |
+|---|---|---|
+| **1ª** | **Registro Windows** | `HKLM\SOFTWARE\DeepSeekAgentMCP\GOOGLE_CLIENT_ID` |
+| **2ª** | Variável de ambiente | `GOOGLE_CLIENT_ID` |
+| **3ª** | `appsettings.json` | `GoogleAuth.ClientId` |
+
+Configure via registro Windows (recomendado para Windows Service):
 ```powershell
-$env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
-$env:GOOGLE_CLIENT_SECRET = "seu-client-secret"
+$regPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
+New-Item -Path $regPath -Force | Out-Null
+Set-ItemProperty -Path $regPath -Name "GOOGLE_CLIENT_ID" -Value "seu-client-id.apps.googleusercontent.com"
 ```
 
-> O sistema busca as credenciais na seguinte ordem: **variáveis de ambiente** → **Registro Windows** (`HKLM\SOFTWARE\DeepSeekAgentMCP`) → `config/appsettings.json`.
+Ou via variável de ambiente (modo console):
+```powershell
+$env:GOOGLE_CLIENT_ID = "seu-client-id.apps.googleusercontent.com"
+```
 
-#### Configurar no Windows Service
+> ⚠️ **O `ClientSecret` não é mais necessário.** O GIS usa autenticação client-side e o servidor valida o JWT com as chaves públicas do Google (JWKS).
 
-Ao instalar como serviço Windows, passe as credenciais como parâmetros:
+#### Configurar no Google Cloud Console
+
+Após configurar o `ClientId`, é preciso liberar a origem no Google Cloud Console:
+
+1. Acesse [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+2. Clique no **OAuth 2.0 Client ID** que você está usando
+3. Em **Authorized JavaScript Origins**, adicione a URL base do app (ex: `http://localhost:5000`)
+4. Salve
+
+> Sem essa configuração, o Google retorna o erro `"no registered origin"` ao tentar fazer login.
+
+#### Windows Service
+
+O registro é a melhor opção para Windows Service:
 
 ```powershell
 .\scripts\install-service.ps1 -Action install `
     -DeepSeekApiKey "sk-sua-chave" `
     -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
-    -GoogleClientSecret "seu-client-secret" `
     -McpServerToken "seu-token-mcp"
 ```
 
-Ou configure manualmente no registro:
+Ou configure manualmente:
 
 ```powershell
-# 1. Variáveis de ambiente do serviço (lidas como env vars)
-$regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\DeepSeekAgentMCP"
-Set-ItemProperty -Path $regPath -Name "Environment" -Value @(
-    "GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com",
-    "GOOGLE_CLIENT_SECRET=seu-client-secret"
-) -Type MultiString
-
-# 2. Fallback direto via HKLM\SOFTWARE\DeepSeekAgentMCP
 $regPath = "HKLM:\SOFTWARE\DeepSeekAgentMCP"
 New-Item -Path $regPath -Force | Out-Null
 Set-ItemProperty -Path $regPath -Name "GOOGLE_CLIENT_ID" -Value "seu-client-id.apps.googleusercontent.com"
-Set-ItemProperty -Path $regPath -Name "GOOGLE_CLIENT_SECRET" -Value "seu-client-secret"
 Set-ItemProperty -Path $regPath -Name "MCP_SERVER_TOKEN" -Value "seu-token-aqui"
 Set-ItemProperty -Path $regPath -Name "DEEPSEEK_API_KEY" -Value "sua-chave-deepseek"
 
@@ -170,7 +188,7 @@ dotnet test
 dotnet test --logger "console;verbosity=detailed"
 ```
 
-O projeto inclui **60 testes unitários** para:
+O projeto inclui **100 testes unitários** para:
 - **DeepSeekAgent** — Orquestração de chamadas e tratamento de respostas
 - **DeepSeekClient** — Chamadas HTTP à API DeepSeek (com fake client)
 - **InputSanitizer** — Sanitização de entrada, prevenção de prompt injection e XSS (9 testes)
@@ -260,14 +278,13 @@ O agente pode ser executado como um **Serviço Windows**, rodando em segundo pla
 Execute o PowerShell como **Administrador** e use o script de instalação:
 
 ```powershell
-# Instalar o serviço (sem Google OAuth)
+# Instalar o serviço (sem Google Auth)
 .\scripts\install-service.ps1 -Action install
 
 # Instalar o serviço com todas as credenciais
 .\scripts\install-service.ps1 -Action install `
     -DeepSeekApiKey "sk-sua-chave" `
     -GoogleClientId "seu-client-id.apps.googleusercontent.com" `
-    -GoogleClientSecret "seu-client-secret" `
     -McpServerToken "seu-token-mcp"
 
 # Verificar status
@@ -280,11 +297,11 @@ Execute o PowerShell como **Administrador** e use o script de instalação:
 O script:
 1. Compila o projeto em modo **Release** com `dotnet publish --self-contained`
 2. Cria o serviço Windows com nome `DeepSeekAgentMCP`
-3. Configura as variáveis de ambiente no registro do serviço (`Environment`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MCP_SERVER_TOKEN`
+3. Configura as variáveis de ambiente no registro do serviço (`Environment`): `GOOGLE_CLIENT_ID`, `MCP_SERVER_TOKEN`
 4. Registra todas as variáveis em `HKLM\\SOFTWARE\\DeepSeekAgentMCP` como fallback:
    - `DEEPSEEK_API_KEY` — Chave da API DeepSeek
    - `MCP_SERVER_TOKEN` — Token de autenticação do servidor MCP
-   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Credenciais Google OAuth
+   - `GOOGLE_CLIENT_ID` — Client ID do Google Identity Services (GIS)
 5. Configura inicialização automática
 6. Inicia o serviço automaticamente
 
