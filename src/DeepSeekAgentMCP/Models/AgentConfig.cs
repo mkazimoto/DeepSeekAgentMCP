@@ -31,7 +31,7 @@ public record AgentConfig
     public bool WebEnabled { get; init; } = true;
 
     /// <summary>Web server URLs</summary>
-    public string WebUrls { get; init; } = "http://localhost:5000";
+    public string WebUrls { get; init; } = "http://0.0.0.0:5000";
 
     /// <summary>Auto-launch browser on start</summary>
     public bool LaunchBrowser { get; init; } = false;

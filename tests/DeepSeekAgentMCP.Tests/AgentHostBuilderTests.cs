@@ -174,7 +174,7 @@ public class AgentHostBuilderTests
                 },
                 "WebServer": {
                     "Enabled": true,
-                    "Urls": "http://localhost:5000",
+                    "Urls": "http://0.0.0.0:5000",
                     "LaunchBrowser": false
                 },
                 "RateLimiting": {
