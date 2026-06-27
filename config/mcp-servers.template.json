@@ -10,10 +10,6 @@
       },
       "TimeoutSeconds": 30,
       "AllowedTools": [
-        "consulta_saldo_estoque",
-        "consulta_preco_produto",
-        "consulta_cliente",
-        "executa_sql*"
       ] 
     }
   ]
