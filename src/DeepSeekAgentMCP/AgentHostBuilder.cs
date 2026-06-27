@@ -1,8 +1,6 @@
 using System.Text.Json;
 using DeepSeekAgentMCP.Models;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.Extensions.Logging;
 
 namespace DeepSeekAgentMCP;
@@ -138,12 +136,10 @@ public static class AgentHostBuilder
             var googleEnabled = googleAuthProp.TryGetProperty("Enabled", out var gaEnabledProp) && gaEnabledProp.GetBoolean();
             if (googleEnabled)
             {
-                // Priority 1: Environment variables
-                var clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
-                var clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
-
-                // Priority 2: Windows Registry (HKLM\SOFTWARE\DeepSeekAgentMCP)
-                if (string.IsNullOrWhiteSpace(clientId) && OperatingSystem.IsWindows())
+                // Priority 1: Windows Registry (HKLM\SOFTWARE\DeepSeekAgentMCP)
+                var clientId = string.Empty;
+                var clientSecret = string.Empty;
+                if (OperatingSystem.IsWindows())
                 {
                     try
                     {
@@ -155,6 +151,12 @@ public static class AgentHostBuilder
                     }
                     catch { }
                 }
+
+                // Priority 2: Environment variables
+                if (string.IsNullOrWhiteSpace(clientId))
+                    clientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID") ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(clientSecret))
+                    clientSecret = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET") ?? string.Empty;
 
                 // Priority 3: Config file (appsettings.json)
                 if (string.IsNullOrWhiteSpace(clientId) && googleAuthProp.TryGetProperty("ClientId", out var clientIdProp))
@@ -171,13 +173,17 @@ public static class AgentHostBuilder
                         .ToList()!;
                 }
 
-                googleAuth = new GoogleAuthConfig
+                // Only create the config if we have a non-empty ClientId
+                if (!string.IsNullOrWhiteSpace(clientId))
                 {
-                    ClientId = clientId,
-                    ClientSecret = clientSecret,
-                    Scopes = scopes,
-                    Enabled = true
-                };
+                    googleAuth = new GoogleAuthConfig
+                    {
+                        ClientId = clientId,
+                        ClientSecret = clientSecret,
+                        Scopes = scopes,
+                        Enabled = true
+                    };
+                }
             }
         }
 
@@ -242,6 +248,11 @@ public static class AgentHostBuilder
 
         if (config.RateLimitPerMinute <= 0)
             errors.Add("RateLimitPerMinute must be greater than 0.");
+
+        // Warn about GoogleAuth config issues
+        var googleAuthSection = config.GoogleAuth;
+        if (googleAuthSection is { Enabled: true } && string.IsNullOrWhiteSpace(googleAuthSection.ClientId))
+            errors.Add("Google authentication is enabled but ClientId is not configured. Set GOOGLE_CLIENT_ID environment variable or add ClientId to the GoogleAuth section in appsettings.json.");
 
         return errors;
     }
@@ -341,15 +352,12 @@ public static class AgentHostBuilder
             logger?.LogInformation("HTTPS enabled");
         }
 
-        // --- Google OAuth + Cookie Authentication ---
-        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 })
+        // --- Google Identity Services (GIS) + Cookie Authentication ---
+        // GIS uses client-side authentication via Google's JS library.
+        // The server validates the ID token received from the client and creates a cookie session.
+        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0 })
         {
-            builder.Services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
-            })
+            builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
             .AddCookie(options =>
             {
                 options.Cookie.Name = "deepseek-agent-auth";
@@ -361,32 +369,11 @@ public static class AgentHostBuilder
                 options.LoginPath = "/api/auth/google/login";
                 options.LogoutPath = "/api/auth/logout";
                 options.AccessDeniedPath = "/";
-            })
-            .AddGoogle(options =>
-            {
-                options.ClientId = config.GoogleAuth.ClientId;
-                options.ClientSecret = config.GoogleAuth.ClientSecret;
-                options.Scope.Clear();
-                foreach (var scope in config.GoogleAuth.Scopes)
-                    options.Scope.Add(scope);
-                options.SaveTokens = true;
-                options.CallbackPath = "/api/auth/google/callback";
-                options.ClaimActions.MapJsonKey("picture", "picture");
-                options.Events = new Microsoft.AspNetCore.Authentication.OAuth.OAuthEvents
-                {
-                    OnCreatingTicket = context =>
-                    {
-                        context.Identity?.AddClaim(new System.Security.Claims.Claim(
-                            "login_timestamp",
-                            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()));
-                        return System.Threading.Tasks.Task.CompletedTask;
-                    }
-                };
             });
 
             builder.Services.AddAuthorization();
 
-            logger?.LogInformation("Google OAuth authentication enabled");
+            logger?.LogInformation("Google Identity Services (GIS) authentication enabled");
         }
 
         builder.WebHost.UseUrls(config.WebUrls);
@@ -398,7 +385,7 @@ public static class AgentHostBuilder
         }
 
         // --- Authentication middleware (only if Google auth is enabled) ---
-        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 })
+        if (config.GoogleAuth is { Enabled: true, ClientId.Length: > 0 })
         {
             app.UseAuthentication();
             app.UseAuthorization();

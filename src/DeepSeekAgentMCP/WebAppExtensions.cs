@@ -3,7 +3,6 @@ using System.Security.Claims;
 using DeepSeekAgentMCP.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
 using System.Collections.Concurrent;
 
 namespace DeepSeekAgentMCP;
@@ -56,7 +55,7 @@ public static class WebAppExtensions
         GoogleAuthConfig? googleAuth = null,
         UserLogger? userLogger = null)
     {
-        var googleAuthEnabled = googleAuth is { Enabled: true, ClientId.Length: > 0, ClientSecret.Length: > 0 };
+        var googleAuthEnabled = googleAuth is { Enabled: true, ClientId.Length: > 0 };
 
         // --- Helper to check authentication (token OR Google cookie) ---
         static IResult? CheckAuth(HttpContext httpContext, bool requireAuth, string? authToken, bool googleAuthEnabled)
@@ -296,24 +295,58 @@ public static class WebAppExtensions
                     });
                 }
 
-                return Results.Ok(new { authenticated = false });
+                return Results.Ok(new
+                {
+                    authenticated = false,
+                    clientId = googleAuth?.ClientId
+                });
             });
 
-            // GET /api/auth/google/login — trigger Google OAuth challenge
-            app.MapGet("/api/auth/google/login", async (HttpContext httpContext) =>
+            // POST /api/auth/google/callback — validate GIS credential (ID token) and create cookie session
+            app.MapPost("/api/auth/google/callback", async (HttpContext httpContext, GoogleTokenRequest request) =>
             {
-                // If already authenticated, redirect to home
-                if (httpContext.User.Identity?.IsAuthenticated == true)
-                    return Results.Redirect("/");
+                if (string.IsNullOrWhiteSpace(request.Credential))
+                    return Results.BadRequest(new { error = "Credential is required." });
 
-                // Challenge with Google — after auth, redirect back to /
-                var redirectUrl = "/";
-                var properties = new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+                if (string.IsNullOrWhiteSpace(googleAuth?.ClientId))
+                    return Results.Json(new { error = "Google auth is not configured." }, statusCode: 500);
+
+                // Validate the Google ID token
+                var principal = await GoogleTokenValidator.ValidateIdTokenAsync(request.Credential, googleAuth.ClientId);
+                if (principal == null)
+                    return Results.Json(new { error = "Invalid Google credential." }, statusCode: 401);
+
+                // Create cookie session
+                await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties
                 {
-                    RedirectUri = redirectUrl
-                };
-                await httpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, properties);
-                return Results.Empty;
+                    IsPersistent = true,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+                });
+
+                // Extract user info for response
+                var email = principal.FindFirst(ClaimTypes.Email)?.Value;
+                var name = principal.FindFirst(ClaimTypes.Name)?.Value;
+                var pictureClaim = principal.FindFirst("picture")?.Value;
+
+                var loginTimestamp = principal.FindFirst("login_timestamp")?.Value ?? "0";
+                var pictureUrl = pictureClaim != null
+                    ? $"/api/auth/profile-picture?v={loginTimestamp}"
+                    : null;
+
+                // Log login event
+                var loginKey = $"{email ?? "unknown"}_{loginTimestamp}";
+                if (_loggedInUsers.TryAdd(loginKey, 0))
+                {
+                    userLogger?.LogEvent(UserLogEvents.Login, name, email, null, GetClientIp(httpContext));
+                }
+
+                return Results.Ok(new
+                {
+                    authenticated = true,
+                    name,
+                    email,
+                    picture = pictureUrl
+                });
             });
 
             // GET /api/auth/profile-picture — proxy que baixa a foto do Google e cacheia no servidor

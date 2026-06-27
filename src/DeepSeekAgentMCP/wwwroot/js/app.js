@@ -2,11 +2,24 @@
 // DeepSeek Agent MCP - Web Interface
 // ============================================
 
+// Global callback for Google Identity Services (GIS).
+// GIS calls this function by name when the user completes sign-in.
+let _chatAppInstance = null;
+
+function handleGisCredential(response) {
+    if (_chatAppInstance) {
+        _chatAppInstance.handleGisCredentialResponse(response);
+    }
+}
+
 class ChatApp {
     constructor() {
+        _chatAppInstance = this;
         this.isLoading = false;
         this.isAuthenticated = false;
         this.userInfo = null;
+        this.gisClientId = null;
+        this._gisInitialized = false;
         // Generate a unique session ID per tab/instance
         // This ensures each browser tab has its own isolated conversation
         this.sessionId = crypto.randomUUID ? crypto.randomUUID() : 
@@ -24,7 +37,7 @@ class ChatApp {
         this.checkAuthStatus();
     }
 
-    // --- Authentication ---
+    // --- Authentication (Google Identity Services) ---
     async checkAuthStatus() {
         try {
             const response = await fetch('/api/auth/status');
@@ -33,6 +46,7 @@ class ChatApp {
             if (data.authenticated) {
                 this.isAuthenticated = true;
                 this.userInfo = data;
+                this.gisClientId = data.clientId || null;
                 this.hideLogin();
                 await this.restoreWelcomeMessage();
                 this.loadMcpStatus();
@@ -52,6 +66,7 @@ class ChatApp {
             } else {
                 // Not authenticated — show login screen
                 this.isAuthenticated = false;
+                this.gisClientId = data.clientId || null;
                 this.showLogin();
             }
         } catch (err) {
@@ -69,12 +84,123 @@ class ChatApp {
 
     showLogin() {
         const overlay = document.getElementById('login-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-            document.getElementById('google-signin-btn').onclick = () => {
-                window.location.href = '/api/auth/google/login';
-            };
+        if (!overlay) return;
+        overlay.style.display = 'flex';
+
+        // Initialize GIS when the overlay is shown
+        this.initGis();
+    }
+
+    /**
+     * Initializes Google Identity Services (GIS) on the login overlay.
+     * Sets up the One Tap and the sign-in button programmatically.
+     */
+    initGis() {
+        if (this._gisInitialized) {
+            return;
         }
+
+        if (!this.gisClientId) {
+            console.warn(
+                'GIS: Google Client ID not available from server. ' +
+                'Check that GoogleAuth.ClientId is configured in appsettings.json ' +
+                'or the GOOGLE_CLIENT_ID environment variable is set.'
+            );
+            return;
+        }
+
+        if (typeof google === 'undefined' || !google.accounts) {
+            console.warn('GIS: Google Identity Services script not loaded yet. Retrying...');
+            // Retry once after a short delay (GIS script may still be loading)
+            setTimeout(() => this.initGis(), 1000);
+            return;
+        }
+
+        console.log('GIS: Initializing with client ID:', this.gisClientId);
+
+        try {
+            // Initialize GIS with the client ID from the server
+            google.accounts.id.initialize({
+                client_id: this.gisClientId,
+                callback: handleGisCredential,
+                auto_prompt: false
+            });
+
+            // Render the Google Sign-In button inside our custom button container
+            google.accounts.id.renderButton(
+                document.getElementById('google-signin-btn'),
+                {
+                    type: 'standard',
+                    theme: 'outline',
+                    size: 'large',
+                    text: 'signin_with',
+                    shape: 'pill',
+                    width: 280
+                }
+            );
+
+            this._gisInitialized = true;
+        } catch (err) {
+            console.error('GIS: Failed to initialize:', err);
+        }
+    }
+
+    /**
+     * Called by GIS after successful authentication.
+     * Sends the credential (ID token) to the server for validation.
+     */
+    async handleGisCredentialResponse(response) {
+        if (!response || !response.credential) {
+            console.error('GIS: No credential received from Google');
+            this.showLoginError('Falha na autenticação: nenhum credential recebido do Google.');
+            return;
+        }
+
+        console.log('GIS: Credential received, sending to server for validation...');
+
+        try {
+            const res = await fetch('/api/auth/google/callback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential: response.credential })
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => null);
+                const errorMsg = err?.error || `Erro ${res.status}: ${res.statusText}`;
+                console.error('GIS: Server rejected credential:', errorMsg);
+                this.showLoginError(
+                    'Falha na autenticação: o servidor rejeitou o credential. ' +
+                    'Verifique se o GoogleAuth.ClientId está configurado corretamente no servidor.'
+                );
+                return;
+            }
+
+            // Reload the page to reflect authenticated state
+            window.location.reload();
+        } catch (err) {
+            console.error('GIS: Network error sending credential to server:', err);
+            this.showLoginError(
+                'Falha de rede ao autenticar. Verifique se o servidor está rodando e tente novamente.'
+            );
+        }
+    }
+
+    /**
+     * Shows an error message in the login overlay.
+     */
+    showLoginError(message) {
+        const card = document.querySelector('.login-card');
+        if (!card) return;
+
+        let errorEl = card.querySelector('.login-error');
+        if (!errorEl) {
+            errorEl = document.createElement('p');
+            errorEl.className = 'login-error';
+            card.appendChild(errorEl);
+        }
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
     }
 
     hideLogin() {
