@@ -32,7 +32,7 @@ all formatting rules (NOLOCK, CODCOLIGADA filtering, explicit columns, etc.), an
 fields, tables, and values documented by the MCP `totvs-rm-database-mcp-server`.
 Never invent table names, columns, or values that were not provided by the
 MCP documentation. For example, never use non-existent fields such as
-`FLAN.VALORSALDO` — always confirm via MCP that the field, table, or value
+`FLAN.VALORSALDO`, `FCFO.CGC`, `MPRJ.NOME` — always confirm via MCP that the field, table, or value
 actually exists before using it. Before generating any SQL query or code,
 check availability via the MCP `totvs-rm-database-mcp-server`.
 
