@@ -366,10 +366,17 @@ public static class WebAppExtensions
                     ?? user.FindFirst("image")?.Value;
 
                 if (string.IsNullOrEmpty(pictureClaim))
+                {
+                    logger?.LogWarning("Profile picture: no picture claim found in cookie for user {Email}",
+                        user.FindFirst("email")?.Value ?? user.FindFirst(ClaimTypes.Email)?.Value ?? "unknown");
                     return Results.NotFound();
+                }
 
+                // JWT 8.x: MapInboundClaims defaults to false, so sub/email stay as short names
                 var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? user.FindFirst("sub")?.Value
                     ?? user.FindFirst(ClaimTypes.Email)?.Value
+                    ?? user.FindFirst("email")?.Value
                     ?? "default";
 
                 var version = httpContext.Request.Query["v"].FirstOrDefault() ?? "0";
@@ -382,24 +389,41 @@ public static class WebAppExtensions
                     return Results.File(cached.Data, cached.ContentType);
                 }
 
+                logger?.LogDebug("Profile picture: fetching from Google for userId={UserId}, url={Url}", userId, pictureClaim);
+
                 // Fetch from Google
                 try
                 {
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                     var response = await _pictureHttpClient.GetAsync(pictureClaim, cts.Token);
                     if (!response.IsSuccessStatusCode)
+                    {
+                        logger?.LogWarning("Profile picture: Google returned {StatusCode} for url={Url}", response.StatusCode, pictureClaim);
                         return Results.NotFound();
+                    }
 
                     var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+
+                    // Rejeitar respostas que não sejam imagens (ex: redirecionamento para página de login)
+                    if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger?.LogWarning("Profile picture: Google returned non-image content type '{ContentType}' for url={Url}", contentType, pictureClaim);
+                        return Results.NotFound();
+                    }
+
                     var data = await response.Content.ReadAsByteArrayAsync(cts.Token);
 
                     _pictureCache[cacheKey] = (data, contentType);
 
+                    logger?.LogDebug("Profile picture: cached {Bytes} bytes (type={ContentType}) for userId={UserId}", data.Length, contentType, userId);
+
                     httpContext.Response.Headers.CacheControl = "private, max-age=3600";
                     return Results.File(data, contentType);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    logger?.LogWarning(ex, "Profile picture: exception while fetching url={Url}", pictureClaim);
+
                     // Se falhou, tenta servir o cache anterior (sem versão) como fallback
                     var fallbackKey = $"profile_pic_{userId}_0";
                     if (_pictureCache.TryGetValue(fallbackKey, out var fallback))
@@ -409,6 +433,17 @@ public static class WebAppExtensions
                     }
                     return Results.NotFound();
                 }
+            });
+
+            // GET /api/auth/debug/claims — retorna os claims do cookie para diagnóstico (apenas usuários autenticados)
+            app.MapGet("/api/auth/debug/claims", (HttpContext httpContext) =>
+            {
+                var user = httpContext.User;
+                if (user.Identity?.IsAuthenticated != true)
+                    return Results.Unauthorized();
+
+                var claims = user.Claims.Select(c => new { type = c.Type, value = c.Value }).ToList();
+                return Results.Ok(new { authenticated = true, claims });
             });
 
             // POST /api/auth/logout — sign out and close session

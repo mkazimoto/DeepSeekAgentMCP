@@ -227,12 +227,12 @@ class ChatApp {
                 const img = document.createElement('img');
                 img.src = data.picture;
                 img.alt = this.escapeHtml(data.name);
-                img.onerror = function () {
-                    this.outerHTML = personIcon;
+                img.onerror = () => {
+                    avatar.innerHTML = this.getInitialsAvatar(data.name, 36);
                 };
                 avatar.appendChild(img);
             } else {
-                avatar.innerHTML = personIcon;
+                avatar.innerHTML = this.getInitialsAvatar(data.name, 36);
             }
 
             userInfoEl.appendChild(avatar);
@@ -1437,6 +1437,31 @@ class ChatApp {
         return div.innerHTML;
     }
 
+    // Gera um SVG de avatar com as iniciais do usuário (fallback quando não há foto)
+    getInitialsAvatar(name, size = 40) {
+        const words = (name || '?').trim().split(/\s+/);
+        const initials = words.length >= 2
+            ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+            : (name[0] || '?').toUpperCase();
+
+        // Paleta de cores determinística baseada no nome
+        const colors = [
+            ['#1d4ed8', '#dbeafe'], ['#0f766e', '#ccfbf1'], ['#7c3aed', '#ede9fe'],
+            ['#be185d', '#fce7f3'], ['#b45309', '#fef3c7'], ['#0369a1', '#e0f2fe'],
+            ['#15803d', '#dcfce7'], ['#9333ea', '#f3e8ff'], ['#c2410c', '#ffedd5'],
+        ];
+        let hash = 0;
+        for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        const [fg, bg] = colors[Math.abs(hash) % colors.length];
+        const fontSize = Math.round(size * 0.38);
+
+        return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="${size}" height="${size}" rx="${Math.round(size * 0.25)}" fill="${bg}"/>
+            <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
+                font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="600" fill="${fg}">${initials}</text>
+        </svg>`;
+    }
+
     // --- HTML Sanitization (XSS Protection) ---
     sanitizeHtml(html) {
         // Remove event handlers (onclick, onload, onerror, etc.)
@@ -1484,6 +1509,7 @@ class ChatApp {
 
         if (type === 'user') {
             const picture = this.userInfo?.picture;
+            const name = this.userInfo?.name || '';
             if (picture) {
                 const img = document.createElement('img');
                 img.src = picture;
@@ -1491,18 +1517,16 @@ class ChatApp {
                 img.height = 40;
                 img.alt = 'Você';
                 img.style.borderRadius = '8px';
-                img.onerror = function() {
-                    this.outerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                        <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>`;
+                img.onerror = () => {
+                    img.replaceWith(...(function() {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = this.getInitialsAvatar(name, 40);
+                        return tmp.childNodes;
+                    }).call(this));
                 };
                 avatar.appendChild(img);
             } else {
-                avatar.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <circle cx="9" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
-                    <path d="M3 17C3 13.6863 5.68629 11 9 11C12.3137 11 15 13.6863 15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>`;
+                avatar.innerHTML = this.getInitialsAvatar(name, 40);
             }
         } else {
             avatar.innerHTML = `
