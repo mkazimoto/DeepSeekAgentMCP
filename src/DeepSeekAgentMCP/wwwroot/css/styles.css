@@ -401,6 +401,35 @@ body {
     transform: scale(0.97);
 }
 
+/* Header User Avatar */
+.header-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.header-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Header Logout Button */
+.header-logout-btn {
+    color: var(--text-secondary) !important;
+}
+
+.header-logout-btn:hover {
+    color: #dc2626 !important;
+}
+
+[data-theme="dark"] .header-logout-btn:hover {
+    color: #f87171 !important;
+}
+
 /* ============================================
    Main Content
    ============================================ */

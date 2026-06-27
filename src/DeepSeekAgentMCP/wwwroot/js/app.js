@@ -261,6 +261,20 @@ class ChatApp {
 
             document.getElementById('logout-btn').addEventListener('click', () => this.logout());
         }
+
+        // Show header user avatar and logout button when authenticated
+        const headerAvatar = document.getElementById('header-user-avatar');
+        const headerImg = document.getElementById('header-user-img');
+        if (headerAvatar && headerImg && data.picture) {
+            headerImg.src = data.picture;
+            headerImg.alt = this.escapeHtml(data.name || '');
+            headerAvatar.style.display = '';
+        }
+
+        const headerLogout = document.getElementById('header-logout-btn');
+        if (headerLogout) {
+            headerLogout.style.display = '';
+        }
     }
 
     async logout() {
@@ -324,6 +338,12 @@ class ChatApp {
         document.querySelectorAll('.command-btn').forEach(btn => {
             btn.addEventListener('click', () => this.handleCommand(btn.dataset.command));
         });
+
+        // Header logout button
+        const headerLogoutBtn = document.getElementById('header-logout-btn');
+        if (headerLogoutBtn) {
+            headerLogoutBtn.addEventListener('click', () => this.logout());
+        }
 
         // Theme toggle
         this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
