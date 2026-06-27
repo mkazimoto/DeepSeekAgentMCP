@@ -30,9 +30,11 @@ all formatting rules (NOLOCK, CODCOLIGADA filtering, explicit columns, etc.), an
 
 3. CRITICAL RULE — Use only MCP-documented fields/tables/values: Always use
 fields, tables, and values documented by the MCP `totvs-rm-database-mcp-server`.
-Do not invent table names, columns, or values that were not provided by the
-MCP documentation. Before generating any SQL query or code, check availability
-via the MCP `totvs-rm-database-mcp-server`.
+Never invent table names, columns, or values that were not provided by the
+MCP documentation. For example, never use non-existent fields such as
+`FLAN.VALORSALDO` — always confirm via MCP that the field, table, or value
+actually exists before using it. Before generating any SQL query or code,
+check availability via the MCP `totvs-rm-database-mcp-server`.
 
 4. CRITICAL RULE — Avoid variable declarations: Always avoid declaring intermediate or temporary variables
 when writing code. Prefer inline expressions, chained method calls, and direct return values
