@@ -331,9 +331,13 @@ class ChatApp {
 
         // Copy code button delegation
         this.elements.messagesContainer.addEventListener('click', (e) => {
-            const btn = e.target.closest('[data-copy-code]');
-            if (btn) {
-                this.copyCodeContent(btn);
+            const copyBtn = e.target.closest('[data-copy-code]');
+            if (copyBtn) {
+                this.copyCodeContent(copyBtn);
+            }
+            const downloadBtn = e.target.closest('[data-download-code]');
+            if (downloadBtn) {
+                this.downloadCodeContent(downloadBtn);
             }
         });
 
@@ -623,13 +627,17 @@ class ChatApp {
                 }
             );
 
-            // Step 2: Add copy button to remaining (non-mermaid) code blocks
+            // Step 2: Add copy button (and download button for SQL) to remaining (non-mermaid) code blocks
             html = html.replace(
                 /<pre><code(?: class="([^"]*)")?>/g,
                 (match, lang) => {
                     const langLabel = lang ? lang.replace(/^language-/, '') : 'code';
                     const classAttr = lang ? ` class="${lang}"` : '';
-                    return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${langLabel}</span><button class="copy-btn" data-copy-code title="Copiar código"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copiar</span></button></div><pre><code${classAttr}>`;
+                    const isSql = langLabel === 'sql';
+                    const downloadBtn = isSql
+                        ? `<button class="download-btn" data-download-code title="Baixar SQL"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Download</span></button>`
+                        : ``;
+                    return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${langLabel}</span><div class="code-block-actions">${downloadBtn}<button class="copy-btn" data-copy-code title="Copiar código"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copiar</span></button></div></div><pre><code${classAttr}>`;
                 }
             );
             html = html.replace(/<\/code><\/pre>(?!\s*<\/div>)/g, `</code></pre></div>`);
@@ -917,6 +925,45 @@ class ChatApp {
             } catch {
                 this.showToast('❌ Erro ao copiar');
             }
+        }
+    }
+
+    // --- Download Code (SQL) ---
+    async downloadCodeContent(btn) {
+        const wrapper = btn.closest('.code-block-wrapper');
+        if (!wrapper) return;
+
+        const code = wrapper.querySelector('code');
+        if (!code) return;
+
+        const text = code.textContent;
+        const langLabel = wrapper.querySelector('.code-lang')?.textContent || 'sql';
+        const extension = langLabel === 'sql' ? 'sql' : 'txt';
+        const filename = `consulta.${extension}`;
+
+        try {
+            // Prefer the modern Blob download approach
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            const span = btn.querySelector('span');
+            const original = span.textContent;
+            span.textContent = 'Baixado!';
+            btn.classList.add('downloaded');
+
+            setTimeout(() => {
+                span.textContent = original;
+                btn.classList.remove('downloaded');
+            }, 2000);
+        } catch {
+            this.showToast('❌ Erro ao baixar');
         }
     }
 
