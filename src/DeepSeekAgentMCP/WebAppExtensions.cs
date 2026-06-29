@@ -144,6 +144,16 @@ public static class WebAppExtensions
             if (string.IsNullOrWhiteSpace(sanitizedMessage))
                 return Results.BadRequest(new { error = "Message contains no valid content after sanitization." });
 
+            // --- Injeção de dialeto SQL ---
+            var allowedDialects = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "sqlserver", "oracle" };
+            if (!string.IsNullOrWhiteSpace(request.SqlDialect) && allowedDialects.Contains(request.SqlDialect))
+            {
+                var dialectLabel = request.SqlDialect.Equals("oracle", StringComparison.OrdinalIgnoreCase)
+                    ? "Oracle (PL/SQL)"
+                    : "SQL Server (T-SQL)";
+                sanitizedMessage = $"[Banco de dados configurado: {dialectLabel}]\n\n{sanitizedMessage}";
+            }
+
             try
             {
                 var response = await sessionManager.ProcessMessageAsync(sessionId, sanitizedMessage, clientIp, userName, userEmail, ct);

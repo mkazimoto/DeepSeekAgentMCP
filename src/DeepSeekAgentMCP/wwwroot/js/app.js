@@ -33,6 +33,7 @@ class ChatApp {
         this.initEventListeners();
         this.initTheme();
         this.initMermaid();
+        this.initSqlDialect();
         // Check auth status first, then initialize UI
         this.checkAuthStatus();
     }
@@ -288,6 +289,9 @@ class ChatApp {
             menuToggle: document.getElementById('menu-toggle'),
             themeToggle: document.getElementById('theme-toggle'),
             statusIndicator: document.getElementById('status-indicator'),
+            sqlSettingsBtn: document.getElementById('sql-settings-btn'),
+            sqlSettingsModal: document.getElementById('sql-settings-modal'),
+            sqlDialectBadge: document.getElementById('sql-dialect-badge'),
         };
     }
 
@@ -329,6 +333,22 @@ class ChatApp {
         // Theme toggle
         this.elements.themeToggle.addEventListener('click', () => this.toggleTheme());
 
+        // SQL settings
+        this.elements.sqlSettingsBtn.addEventListener('click', () => this.openSqlSettings());
+        this.elements.sqlDialectBadge.addEventListener('click', () => this.openSqlSettings());
+        document.getElementById('sql-settings-close').addEventListener('click', () => this.closeSqlSettings());
+        document.getElementById('sql-settings-cancel').addEventListener('click', () => this.closeSqlSettings());
+        document.getElementById('sql-settings-save').addEventListener('click', () => this.saveSqlSettings());
+        this.elements.sqlSettingsModal.addEventListener('click', (e) => {
+            if (e.target.classList.contains('settings-modal-backdrop')) this.closeSqlSettings();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeDiagramFullscreen();
+                this.closeSqlSettings();
+            }
+        });
+
         // Copy code button delegation
         this.elements.messagesContainer.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-copy-code]');
@@ -359,11 +379,6 @@ class ChatApp {
         document.getElementById('mermaid-modal-export').addEventListener('click', () => this.exportFullscreenDiagram());
         document.getElementById('mermaid-modal').addEventListener('click', (e) => {
             if (e.target.classList.contains('mermaid-modal-backdrop')) {
-                this.closeDiagramFullscreen();
-            }
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
                 this.closeDiagramFullscreen();
             }
         });
@@ -408,6 +423,73 @@ class ChatApp {
             sun.style.display = 'block';
             moon.style.display = 'none';
         }
+    }
+
+    // --- SQL Dialect Settings ---
+    initSqlDialect() {
+        const saved = localStorage.getItem('deepseek-sql-dialect');
+        this.sqlDialect = (saved === 'oracle') ? 'oracle' : 'sqlserver';
+        this._updateDialectBadge();
+    }
+
+    _updateDialectBadge() {
+        if (this.elements.sqlDialectBadge) {
+            this.elements.sqlDialectBadge.textContent =
+                this.sqlDialect === 'oracle' ? 'Oracle' : 'SQL Server';
+        }
+    }
+
+    openSqlSettings() {
+        const modal = this.elements.sqlSettingsModal;
+        if (!modal) return;
+
+        // Reflect current dialect in radio buttons + option highlighting
+        const radios = modal.querySelectorAll('input[name="sql-dialect"]');
+        radios.forEach(r => r.checked = (r.value === this.sqlDialect));
+        this._refreshOptionHighlight(modal);
+
+        modal.style.display = 'flex';
+        requestAnimationFrame(() => modal.classList.add('open'));
+    }
+
+    closeSqlSettings() {
+        const modal = this.elements.sqlSettingsModal;
+        if (!modal || modal.style.display === 'none') return;
+        modal.classList.remove('open');
+        modal.style.display = 'none';
+    }
+
+    saveSqlSettings() {
+        const modal = this.elements.sqlSettingsModal;
+        const checked = modal.querySelector('input[name="sql-dialect"]:checked');
+        if (checked) {
+            this.sqlDialect = checked.value;
+            localStorage.setItem('deepseek-sql-dialect', this.sqlDialect);
+            this._updateDialectBadge();
+        }
+        this.closeSqlSettings();
+    }
+
+    _refreshOptionHighlight(modal) {
+        modal.querySelectorAll('.settings-option').forEach(opt => {
+            const radio = opt.querySelector('input[type="radio"]');
+            opt.classList.toggle('selected', radio && radio.checked);
+            opt.addEventListener('click', () => {
+                modal.querySelectorAll('input[name="sql-dialect"]').forEach(r => r.checked = (r === radio));
+                this._refreshOptionHighlight(modal);
+            }, { once: true });
+        });
+        // Re-attach click on each option to update highlight dynamically
+        modal.querySelectorAll('.settings-option').forEach(opt => {
+            opt.onclick = () => {
+                const radio = opt.querySelector('input[type="radio"]');
+                if (radio) {
+                    modal.querySelectorAll('input[name="sql-dialect"]').forEach(r => r.checked = false);
+                    radio.checked = true;
+                    this._refreshOptionHighlight(modal);
+                }
+            };
+        });
     }
 
     // --- MCP Status ---
@@ -518,7 +600,7 @@ class ChatApp {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, sessionId: this.sessionId })
+                body: JSON.stringify({ message: text, sessionId: this.sessionId, sqlDialect: this.sqlDialect })
             });
 
             // If loading was already turned off (via cancel), don't process response

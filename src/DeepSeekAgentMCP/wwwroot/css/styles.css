@@ -1040,6 +1040,27 @@ body {
     margin-top: 8px;
 }
 
+.sql-dialect-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--accent-primary);
+    color: white;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    cursor: pointer;
+    transition: opacity var(--transition);
+}
+
+.sql-dialect-badge:hover {
+    opacity: 0.85;
+}
+
 /* ============================================
    Spinner
    ============================================ */
@@ -2146,4 +2167,218 @@ body {
     .logs-td:nth-child(5) { display: none; } /* Hide session column on mobile */
     .logs-th:nth-child(6),
     .logs-td:nth-child(6) { display: none; } /* Hide IP column on mobile */
+}
+
+/* ============================================
+   SQL Settings Modal
+   ============================================ */
+.settings-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-modal.open {
+    display: flex;
+    animation: modal-fade-in 0.2s ease-out;
+}
+
+.settings-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.settings-modal-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 92vw;
+    max-width: 480px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    animation: modal-content-in 0.25s ease-out;
+}
+
+.settings-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.settings-modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+}
+
+.settings-modal-body {
+    padding: 24px 20px;
+    flex: 1;
+}
+
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-description {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.settings-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.settings-option {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition);
+    background: var(--bg-secondary);
+    position: relative;
+}
+
+.settings-option:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-tertiary);
+}
+
+.settings-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.settings-option.selected {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-secondary));
+}
+
+.settings-option-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.settings-option-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.settings-option-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-option-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.settings-option-check {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: all var(--transition);
+}
+
+.settings-option.selected .settings-option-check {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: white;
+}
+
+.settings-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.settings-cancel-btn {
+    padding: 8px 18px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.settings-cancel-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.settings-save-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent-primary);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-family);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.settings-save-btn:hover {
+    background: var(--accent-hover);
+}
+
+.settings-save-btn:active {
+    transform: scale(0.97);
 }
