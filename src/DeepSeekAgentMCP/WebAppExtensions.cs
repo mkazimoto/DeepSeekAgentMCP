@@ -93,6 +93,8 @@ public static class WebAppExtensions
         // POST /api/chat — send a message (com rate limiting e sanitização)
         app.MapPost("/api/chat", async (HttpContext httpContext, ChatRequest request, CancellationToken ct) =>
         {
+            logger?.LogInformation("POST /api/chat called from {ClientIp}", GetClientIp(httpContext));
+
             // --- Autenticação ---
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
@@ -182,6 +184,8 @@ public static class WebAppExtensions
         // GET /api/status — MCP server status + connected servers
         app.MapGet("/api/status", (HttpContext httpContext) =>
         {
+            logger?.LogInformation("GET /api/status called from {ClientIp}", GetClientIp(httpContext));
+
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
@@ -202,6 +206,8 @@ public static class WebAppExtensions
         // GET /api/history — conversation history for a session
         app.MapGet("/api/history", (HttpContext httpContext, string? sessionId) =>
         {
+            logger?.LogInformation("GET /api/history called from {ClientIp} (session={SessionId})", GetClientIp(httpContext), sessionId ?? "default");
+
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
@@ -219,6 +225,8 @@ public static class WebAppExtensions
         // POST /api/cancel — cancel an active request for a session
         app.MapPost("/api/cancel", (HttpContext httpContext, ChatRequest request) =>
         {
+            logger?.LogInformation("POST /api/cancel called from {ClientIp} (session={SessionId})", GetClientIp(httpContext), GetSessionId(request));
+
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
@@ -235,6 +243,8 @@ public static class WebAppExtensions
         // POST /api/clear — clear conversation for a session
         app.MapPost("/api/clear", async (HttpContext httpContext, ChatRequest request) =>
         {
+            logger?.LogInformation("POST /api/clear called from {ClientIp} (session={SessionId})", GetClientIp(httpContext), GetSessionId(request));
+
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
@@ -251,6 +261,8 @@ public static class WebAppExtensions
         // GET /api/health — liveness/readiness probe (público, sem auth)
         app.MapGet("/api/health", (HttpContext httpContext) =>
         {
+            logger?.LogInformation("GET /api/health called from {ClientIp}", GetClientIp(httpContext));
+
             return Results.Ok(new
             {
                 status = "healthy",
@@ -271,6 +283,8 @@ public static class WebAppExtensions
             // GET /api/auth/status — check current authentication status
             app.MapGet("/api/auth/status", (HttpContext httpContext) =>
             {
+                logger?.LogInformation("GET /api/auth/status called from {ClientIp}", GetClientIp(httpContext));
+
                 var user = httpContext.User;
                 if (user.Identity?.IsAuthenticated == true)
                 {
@@ -317,6 +331,8 @@ public static class WebAppExtensions
             // POST /api/auth/google/callback — validate GIS credential (ID token) and create cookie session
             app.MapPost("/api/auth/google/callback", async (HttpContext httpContext, GoogleTokenRequest request) =>
             {
+                logger?.LogInformation("POST /api/auth/google/callback called from {ClientIp}", GetClientIp(httpContext));
+
                 if (string.IsNullOrWhiteSpace(request.Credential))
                     return Results.BadRequest(new { error = "Credential is required." });
 
@@ -366,6 +382,8 @@ public static class WebAppExtensions
             // GET /api/auth/profile-picture — proxy que baixa a foto do Google e cacheia no servidor
             app.MapGet("/api/auth/profile-picture", async (HttpContext httpContext) =>
             {
+                logger?.LogInformation("GET /api/auth/profile-picture called from {ClientIp}", GetClientIp(httpContext));
+
                 var user = httpContext.User;
                 if (user.Identity?.IsAuthenticated != true)
                     return Results.Unauthorized();
@@ -448,6 +466,8 @@ public static class WebAppExtensions
             // GET /api/auth/debug/claims — retorna os claims do cookie para diagnóstico (apenas usuários autenticados)
             app.MapGet("/api/auth/debug/claims", (HttpContext httpContext) =>
             {
+                logger?.LogInformation("GET /api/auth/debug/claims called from {ClientIp}", GetClientIp(httpContext));
+
                 var user = httpContext.User;
                 if (user.Identity?.IsAuthenticated != true)
                     return Results.Unauthorized();
@@ -459,6 +479,8 @@ public static class WebAppExtensions
             // POST /api/auth/logout — sign out and close session
             app.MapPost("/api/auth/logout", async (HttpContext httpContext, string? sessionId) =>
             {
+                logger?.LogInformation("POST /api/auth/logout called from {ClientIp}", GetClientIp(httpContext));
+
                 var (userName, userEmail) = GetUserInfo(httpContext);
                 var clientIp = GetClientIp(httpContext);
 
@@ -477,12 +499,18 @@ public static class WebAppExtensions
         else
         {
             // Auth not enabled — return simple status
-            app.MapGet("/api/auth/status", () => Results.Ok(new { authenticated = false, authDisabled = true }));
+            app.MapGet("/api/auth/status", (HttpContext httpContext) =>
+            {
+                logger?.LogInformation("GET /api/auth/status called from {ClientIp} (auth disabled)", GetClientIp(httpContext));
+                return Results.Ok(new { authenticated = false, authDisabled = true });
+            });
         }
 
         // GET /api/user-log — recent user activity log entries (protegido por auth)
         app.MapGet("/api/user-log", (HttpContext httpContext, int? count) =>
         {
+            logger?.LogInformation("GET /api/user-log called from {ClientIp}", GetClientIp(httpContext));
+
             var authResult = CheckAuth(httpContext, requireAuth, authToken, googleAuthEnabled);
             if (authResult != null) return authResult;
 
