@@ -18,7 +18,7 @@ Use esta skill quando o usuário precisar de uma consulta SQL com CTE recursivo 
 Pedido: Listar toda a hierarquia de recursos da tarefas da tarefa 122 do projeto 2 e coligada 1.
 
 ```sql server
-WITH CTE_RECURSIVO AS (
+WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDREC, IDPRJREC, IDCMP, IDCMPFILHA, IDISM, QUANTIDADE, VALORUNIT, VALORTOTAL, ATIVO, NIVEL) AS (
     -- ÂNCORA: composição raiz (ponto de partida)
     SELECT
         R.CODCOLIGADA,

@@ -17,7 +17,7 @@ Tabela com auto-relacionamento: `IDPAI` → `IDTRF` (ambos na mesma tabela `MTAR
 Pedido: Listar a hierarquia de todas as tarefas da tarefa 126 do projeto 2 e coligada 1.
 
 ```sql server
-WITH CTE_RECURSIVO AS (
+WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDTRF, CODTRF, NOME, IDPAI, NIVEL) AS (
     -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
     SELECT
         T.CODCOLIGADA,
