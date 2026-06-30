@@ -26,7 +26,7 @@ Se o módulo não estiver claro, use `totvs_list_modules` para listar todos os m
 #### Prefixos de Módulos do RM
 
 | Prefixo | Módulo |
-|---------|--------|
+| ------- | ------ |
 | `0`     | TOTVS Gestão de Custos |
 | `A`     | TOTVS Automação de Ponto |
 | `B`     | TOTVS Avaliação e Pesquisa |
@@ -82,7 +82,7 @@ O schema retorna:
 - **Índices** — para identificar chaves primárias
 
 > **Navegue pelos relacionamentos** para descobrir tabelas auxiliares necessárias (ex: tabelas de cadastro vinculadas via FK).
-> **Sempre filtre pela coluna status** caso a tabela possua uma coluna de status ou situação, inclua filtro por status, consultando os possíveis valores com a ferramenta `totvs_get_table_rules` (não invente valores caso não tenha a informação documentada). Exemplo: `XVENDA.COD_SIT_VENDA = 40 -- 40 - Efetivada`, `FLAN.STATUSLAN = 0 -- 0 - Em Aberto`, `FBOLETO.STATUS = 0 -- 0 - Em Aberto`, `FCFO.ATIVO = 1 -- Apenas Clientes Ativos`, `PFUNC.CODSITUACAO = 'A' -- A - Ativo`, `SALUNO.CODTIPOCURSO = 1 -- 1 - Ensino Superior`, `SCONTRATO.CODSITUACAO = 'A' -- A - Ativo`, `MTAREFA.ATIVA = 1 -- 1 - Ativa`, `XALGCONTRATOLOC.SITUACAOCONTLOC = 0 -- 0 - Efetivado`, `XALGCONTRATOADM.SITUACAOCONTLOC = 0 -- 0 - Efetivado`, `XCONTRATO.COD_SIT_CONT = 40 -- 40 - Efetivado`, `MCNT.STATUS = 0 -- 0 - Em andamneto`, `MCNT.TIPO = 'R' -- R - A Receber`, `MCNT.CNTMATERIAL= 'S' -- S - Prestação de Serviços`, `OFCONTRATO.STATUS = 'A' -- A - Ativo`, `TCNT.CODTCN = '01' -- 01 - Venda de Produtos`, `TCNT.CODSTACNT = '01' -- 01 - Normal`, `SMATRICULA.CODSTATUS = 1 -- 1 - Matriculado`, `EMATRICPL.SITMAT = 1 -- 1 - Ativo`, `SMATRICPL.CODSTATUS = 1 -- 1 - Matriculado`, `UALUCURSO.STATUS = 1 -- 1 - Matriculado`, `TMOV.CODTMV = '1.1.04' -- 1.1.04 - Solicitação de Compra ( RM Solum )`, `DLAF.STATUSLF = 'N' -- N - Normal`
+> **Sempre filtre pela coluna status** caso a tabela possua uma coluna de status ou situação, inclua filtro por status, consultando os possíveis valores com a ferramenta `totvs_get_table_rules` (não invente valores caso não tenha a informação documentada). Exemplo: `XVENDA.COD_SIT_VENDA = 40 /* 40 - Efetivada */`, `FLAN.STATUSLAN = 0 /* 0 - Em Aberto */`, `FBOLETO.STATUS = 0 /* 0 - Em Aberto */`, `FCFO.ATIVO = 1 /* Apenas Clientes Ativos */`, `PFUNC.CODSITUACAO = 'A' /* A - Ativo */`, `SALUNO.CODTIPOCURSO = 1 /* 1 - Ensino Superior */`, `SCONTRATO.CODSITUACAO = 'A' /* A - Ativo */`, `MTAREFA.ATIVA = 1 /* 1 - Ativa */`, `XALGCONTRATOLOC.SITUACAOCONTLOC = 0 /* 0 - Efetivado */`, `XALGCONTRATOADM.SITUACAOCONTLOC = 0 /* 0 - Efetivado */`, `XCONTRATO.COD_SIT_CONT = 40 /* 40 - Efetivado */`, `MCNT.STATUS = 0 /* 0 - Em andamneto */`, `MCNT.TIPO = 'R' /* R - A Receber */`, `MCNT.CNTMATERIAL= 'S' /* S - Prestação de Serviços */`, `OFCONTRATO.STATUS = 'A' /* A - Ativo */`, `TCNT.CODTCN = '01' /* 01 - Venda de Produtos */`, `TCNT.CODSTACNT = '01' /* 01 - Normal */`, `SMATRICULA.CODSTATUS = 1 /* 1 - Matriculado */`, `EMATRICPL.SITMAT = 1 /* 1 - Ativo */`, `SMATRICPL.CODSTATUS = 1 /* 1 - Matriculado */`, `UALUCURSO.STATUS = 1 /* 1 - Matriculado */`, `TMOV.CODTMV = '1.1.04' /* 1.1.04 - Solicitação de Compra ( RM Solum ) */`, `DLAF.STATUSLF = 'N' /* N - Normal */`
 ---
 
 ### Passo 4 — Montar a Consulta
@@ -109,11 +109,11 @@ Aplique **todas** as regras obrigatórias ao escrever o SQL:
    Filtros:   <filtros aplicados>
    ============================================= */
 SELECT
-    -- <Entidade principal>
+    /* <Entidade principal> */
     T1.COLUNA1,
     T1.COLUNA2,
 
-    -- <Entidade relacionada>
+    /* <Entidade relacionada> */
     T2.COLUNA1,
     T2.COLUNA2
 
@@ -142,7 +142,7 @@ ORDER BY
 Antes de entregar, verifique cada item:
 
 | # | Verificação | OK? |
-|---|-------------|-----|
+| - | ----------- | --- |
 | 1 | Todas as colunas estão qualificadas com alias? | ☐ |
 | 2 | Há `(NOLOCK)` em todos os FROM/JOIN? | ☐ |
 | 3 | `CODCOLIGADA` está filtrado em todas as tabelas que o possuem? | ☐ |
@@ -255,7 +255,7 @@ ORDER BY
 ## Dicas de Troubleshooting
 
 | Problema | Solução |
-|----------|---------|
+| -------- | ------- |
 | Não sei o nome da tabela | Use `totvs_search_tables` com termos de negócio |
 | JOIN retorna duplicatas | Verifique se incluiu `CODCOLIGADA` na condição do JOIN |
 | Coluna não encontrada | Consulte `totvs_get_table_schema` para confirmar o nome exato |
