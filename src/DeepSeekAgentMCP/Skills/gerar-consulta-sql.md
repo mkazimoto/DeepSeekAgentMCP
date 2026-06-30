@@ -189,15 +189,15 @@ WHERE
     FLAN.CODCOLIGADA = 1
 
     /* Apenas títulos a receber em aberto */
-    AND FLAN.STATUSLAN = 0 /* 0 - Em Aberto
-                              1 - Baixado
-                              2 - Cancelado
-                              3 - Baixado por Acordo
-                              4 - Baixado parcialmente
-                              5 - Borderô */
+    AND FLAN.STATUSLAN IN (0, 4) /* 0 - Em Aberto
+                                    1 - Baixado
+                                    2 - Cancelado
+                                    3 - Baixado por Acordo
+                                    4 - Baixado parcialmente
+                                    5 - Borderô */
 
-    AND FLAN.PAGREC    = 1 /* 1 - Receber
-                              2 - Pagar */
+    AND FLAN.PAGREC = 1 /* 1 - Receber
+                           2 - Pagar */
 
 ORDER BY
     FLAN.DATAVENCIMENTO
