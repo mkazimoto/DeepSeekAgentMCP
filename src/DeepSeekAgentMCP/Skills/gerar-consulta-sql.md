@@ -98,17 +98,16 @@ Aplique **todas** as regras obrigatórias ao escrever o SQL:
 - [ ] **Filtre por `CODCOLIGADA`** em toda tabela que possua essa coluna
 - [ ] **Prefira `INNER JOIN`** a subconsultas quando possível
 - [ ] **Formate o SQL** com indentação e quebras de linha legíveis
-- [ ] **Inclua comentários** explicando cada bloco lógico da query
+- [ ] **Inclua comentários** explicando cada bloco lógico da query com `/*` e `*/`
 - [ ] **Sempre valide a sintaxe do SQL** Sempre chame a ferramenta `totvs_validate_sql` do MCP `totvs-rm-database-mcp-server`
 #### Template Base
 
 ```sql
--- =============================================
--- Descrição: <objetivo da consulta>
--- Tabelas:   <lista de tabelas principais>
--- Filtros:   <filtros aplicados>
--- =============================================
-
+/* =============================================
+   Descrição: <objetivo da consulta>
+   Tabelas:   <lista de tabelas principais>
+   Filtros:   <filtros aplicados>
+   ============================================= */
 SELECT
     -- <Entidade principal>
     T1.COLUNA1,
@@ -120,16 +119,16 @@ SELECT
 
 FROM TABELA_PRINCIPAL T1 (NOLOCK)
 
--- Relacionamento com tabela auxiliar
+/* Relacionamento com tabela auxiliar */
 INNER JOIN TABELA_AUXILIAR T2 (NOLOCK)
     ON  T2.CODCOLIGADA = T1.CODCOLIGADA
     AND T2.CHAVE       = T1.CHAVE_ESTRANGEIRA
 
 WHERE
-    -- Filtro obrigatório por coligada
+    /* Filtro obrigatório por coligada */
     T1.CODCOLIGADA = <CODCOLIGADA>
 
-    -- Filtros de negócio
+    /* Filtros de negócio */
     AND T1.COLUNA_FILTRO = <VALOR>
 
 ORDER BY
@@ -158,14 +157,13 @@ Antes de entregar, verifique cada item:
 ### Exemplo 1 — Lançamentos Financeiros
 
 ```sql
--- =============================================
--- Descrição: Lançamentos financeiros a receber
--- Tabelas:   FLAN (Lançamentos), FCFO (Clientes/Fornecedores)
--- Filtros:   Coligada, status em aberto
--- =============================================
-
+/* =============================================
+   Descrição: Lançamentos financeiros a receber
+   Tabelas:   FLAN (Lançamentos), FCFO (Clientes/Fornecedores)
+   Filtros:   Coligada, status em aberto
+   ============================================= */
 SELECT
-    -- Dados do lançamento
+    /* Dados do lançamento */
     FLAN.CODCOLIGADA,
     FLAN.IDLAN,
     FLAN.NUMERODOCUMENTO,
@@ -175,31 +173,31 @@ SELECT
     FLAN.VALORSALDO,
     FLAN.STATUSLAN,
 
-    -- Dados do cliente/fornecedor
+    /* Dados do cliente/fornecedor */
     FCFO.NOME,
     FCFO.CGC AS CNPJ_CPF
 
 FROM FLAN (NOLOCK)
 
--- Relacionamento com cadastro de clientes/fornecedores
+/* Relacionamento com cadastro de clientes/fornecedores */
 INNER JOIN FCFO (NOLOCK)
     ON  FCFO.CODCOLIGADA = FLAN.CODCOLIGADA
     AND FCFO.CODCFO      = FLAN.CODCFO
 
 WHERE
-    -- Filtro obrigatório por coligada
+    /* Filtro obrigatório por coligada */
     FLAN.CODCOLIGADA = 1
 
-    -- Apenas títulos a receber em aberto
-    AND FLAN.STATUSLAN = 0 -- 0 - Em Aberto
-                           -- 1 - Baixado
-                           -- 2 - Cancelado
-                           -- 3 - Baixado por Acordo
-                           -- 4 - Baixado parcialmente
-                           -- 5 - Borderô
+    /* Apenas títulos a receber em aberto */
+    AND FLAN.STATUSLAN = 0 /* 0 - Em Aberto
+                              1 - Baixado
+                              2 - Cancelado
+                              3 - Baixado por Acordo
+                              4 - Baixado parcialmente
+                              5 - Borderô */
 
-    AND FLAN.PAGREC    = 1 -- 1 - Receber
-                           -- 2 - Pagar
+    AND FLAN.PAGREC    = 1 /* 1 - Receber
+                              2 - Pagar */
 
 ORDER BY
     FLAN.DATAVENCIMENTO
@@ -208,47 +206,46 @@ ORDER BY
 ### Exemplo 2 — Funcionários Ativos (RH)
 
 ```sql
--- =============================================
--- Descrição: Funcionários ativos com cargo e lotação
--- Tabelas:   PFUNC (Funcionários), PPESSOA (Pessoas), PFUNCAO (Funções)
--- Filtros:   Coligada, situação ativa
--- =============================================
-
+/* =============================================
+   Descrição: Funcionários ativos com cargo e lotação
+   Tabelas:   PFUNC (Funcionários), PPESSOA (Pessoas), PFUNCAO (Funções)
+   Filtros:   Coligada, situação ativa
+   ============================================= */
 SELECT
-    -- Dados do funcionário
+    /* Dados do funcionário */
     PFUNC.CODCOLIGADA,
     PFUNC.CHAPA,
     PFUNC.CODSECAO,
     PFUNC.DATAADMISSAO,
 
-    -- Dados pessoais
+    /* Dados pessoais */
     PPESSOA.NOME,
     PPESSOA.CPF,
 
-    -- Função/cargo
+    /* Função/cargo */
     PFUNCAO.NOME AS CARGO
 
 FROM PFUNC (NOLOCK)
 
--- Dados pessoais
+/* Dados pessoais */
 INNER JOIN PPESSOA (NOLOCK)
     ON PPESSOA.CODIGO = PFUNC.CODPESSOA
 
--- Cargo/função
+/* Cargo/função */
 INNER JOIN PFUNCAO (NOLOCK)
     ON  PFUNCAO.CODCOLIGADA = PFUNC.CODCOLIGADA
     AND PFUNCAO.CODIGO      = PFUNC.CODFUNCAO
 
 WHERE
-    -- Filtro obrigatório por coligada
+    /* Filtro obrigatório por coligada */
     PFUNC.CODCOLIGADA = 1
 
-    -- Apenas funcionários ativos
-    AND PFUNC.CODSITUACAO = 'A' -- A - Ativo
-                                -- I - Inativo
-                                -- F - Férias
-                                -- D - Demitido
-                                -- U - Outros
+    /* Apenas funcionários ativos */
+    AND PFUNC.CODSITUACAO = 'A' /* A - Ativo
+                                   I - Inativo
+                                   F - Férias
+                                   D - Demitido
+                                   U - Outros */
 ORDER BY
     PPESSOA.NOME
 ```

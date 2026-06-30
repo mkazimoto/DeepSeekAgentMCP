@@ -18,7 +18,7 @@ Pedido: Listar a hierarquia de todas as tarefas da tarefa 126 do projeto 2 e col
 
 ```sql server
 WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDTRF, CODTRF, NOME, IDPAI, NIVEL) AS (
-    -- Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos)
+    /* Âncora: a própria tarefa raiz (opcional, ou pode começar só pelos filhos) */
     SELECT
         T.CODCOLIGADA,
         T.IDPRJ,
@@ -32,11 +32,12 @@ WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDTRF, CODTRF, NOME, IDPAI, NIVEL) AS (
     WHERE T.CODCOLIGADA = 1
       AND T.IDPRJ = 2
       AND T.IDTRF = 126  
-      AND T.TIPOPLANILHA = 0  -- 0 - Planilha de Atividades, 1 - Planilha de Serviços
+      AND T.TIPOPLANILHA = 0  /* 0 - Planilha de Atividades 
+                                 1 - Planilha de Serviços */
 
     UNION ALL
 
-    -- Passo recursivo: busca os filhos de cada tarefa encontrada
+    /* Passo recursivo: busca os filhos de cada tarefa encontrada */
     SELECT
         T.CODCOLIGADA,
         T.IDPRJ,
@@ -51,9 +52,9 @@ WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDTRF, CODTRF, NOME, IDPAI, NIVEL) AS (
         ON T.CODCOLIGADA = C.CODCOLIGADA
        AND T.IDPRJ = C.IDPRJ
        AND T.IDPAI = C.IDTRF
-       AND T.IDPAI <> T.IDTRF -- a tarefa raiz tem os 2 campos iguais
+       AND T.IDPAI <> T.IDTRF /* a tarefa raiz tem os 2 campos iguais */
     WHERE
-        C.NIVEL < 20 -- Evita recursão infinita
+        C.NIVEL < 20 /* Evita recursão infinita */
 )
 SELECT
     C.CODCOLIGADA,

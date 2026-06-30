@@ -19,14 +19,14 @@ Pedido: Listar toda a hierarquia de recursos da tarefas da tarefa 122 do projeto
 
 ```sql server
 WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDREC, IDPRJREC, IDCMP, IDCMPFILHA, IDISM, QUANTIDADE, VALORUNIT, VALORTOTAL, ATIVO, NIVEL) AS (
-    -- ÂNCORA: composição raiz (ponto de partida)
+    /* ÂNCORA: composição raiz (ponto de partida) */
     SELECT
         R.CODCOLIGADA,
         R.IDPRJ,
         R.IDREC,
         R.IDPRJREC,
-        R.IDCMP,                                          -- Composição pai
-        R.IDCMPFILHA,                                     -- Sub-composição filha
+        R.IDCMP,       /* Composição pai */
+        R.IDCMPFILHA,  /* Sub-composição filha */
         R.IDISM,
         R.QUANTIDADE,
         R.VALORUNIT,
@@ -46,11 +46,11 @@ WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDREC, IDPRJREC, IDCMP, IDCMPFILHA, IDIS
     WHERE
         T.CODCOLIGADA = 1                            
     AND T.IDPRJ = 2                              
-    AND T.IDTRF = 122       -- Id da tarefa                    
+    AND T.IDTRF = 122 /* Id da tarefa */                    
 
     UNION ALL
 
-    -- PARTE RECURSIVA: sub-composições 
+    /* PARTE RECURSIVA: sub-composições */ 
     SELECT
         F.CODCOLIGADA,
         F.IDPRJ,
@@ -69,9 +69,9 @@ WITH CTE_RECURSIVO (CODCOLIGADA, IDPRJ, IDREC, IDPRJREC, IDCMP, IDCMPFILHA, IDIS
          INNER JOIN CTE_RECURSIVO P
             ON  P.CODCOLIGADA = F.CODCOLIGADA
             AND P.IDPRJ       = F.IDPRJ
-            AND P.IDCMPFILHA  = F.IDCMP         -- A filha vira a composição pai no nível abaixo
+            AND P.IDCMPFILHA  = F.IDCMP /* A filha vira a composição pai no nível abaixo */
     WHERE
-        P.NIVEL < 20  -- Proteção contra recursão infinita
+        P.NIVEL < 20  /* Proteção contra recursão infinita */
 )
 SELECT
     H.CODCOLIGADA,
